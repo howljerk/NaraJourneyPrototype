@@ -1,6 +1,5 @@
 ﻿using DG.Tweening;
 using UnityEngine;
-using UnityEngine.UI;
 
 public class Enemy : MonoBehaviour
 {
@@ -8,9 +7,10 @@ public class Enemy : MonoBehaviour
 
     public enum State
     {
-        Idle,
+        Patrol,
         GettingHijacked,
-        PlayerControlled
+        PlayerControlled,
+        PlayerControlledIdle
     }
 
     [SerializeField] private GameObject m_SpawnPointerPrefab;
@@ -47,6 +47,7 @@ public class Enemy : MonoBehaviour
     public const float kEnemySpeed = 4f;
 
     private GameObject m_SpawnPointer;
+    private SpriteRenderer m_SpawnPointerSprite;
     private Sequence m_SpawnPointerScaleSequence;
     private BoxCollider2D m_HatchBoxCollider;
     private SpriteRenderer m_HatchSprite;
@@ -61,7 +62,7 @@ public class Enemy : MonoBehaviour
     //Player controlled state vars
     private bool m_IsMovingForward;
 
-    public State CurrState { get; set; } = State.Idle;
+    public State CurrState { get; set; } = State.Patrol;
 
     // Start is called before the first frame update
     void Start()
@@ -85,6 +86,7 @@ public class Enemy : MonoBehaviour
 
         m_SpawnPointer = Instantiate(m_SpawnPointerPrefab, m_ScreenRoot);
         m_SpawnPointer.transform.localPosition = pointerPos;
+        m_SpawnPointerSprite = m_SpawnPointer.GetComponent<SpriteRenderer>();
 
         System.Action doSequence = null;
         doSequence = () =>
@@ -96,13 +98,45 @@ public class Enemy : MonoBehaviour
         doSequence();
     }
 
+    private void Remove()
+    {
+        DistanceIntervalEnemySpawner.RemoveEnemy(this);
+
+        Destroy(gameObject);
+        Destroy(m_SpawnPointer);
+
+        if (m_SpawnPointerScaleSequence != null)
+            m_SpawnPointerScaleSequence.Kill();
+        
+        m_SpawnPointer = null;
+        m_SpawnPointerSprite = null;
+        m_SpawnPointerScaleSequence = null;
+    }
+
+    private void ResetState(State state)
+    {
+        switch(state)
+        {
+            case State.PlayerControlled:
+                {
+                    if (m_FlightTween != null)
+                        m_FlightTween.Kill();
+                    m_FlightTween = null;
+
+                    m_IsMovingForward = false;
+                }
+                break;
+        }
+    }
+
     public void SetState(State state)
     {
+        ResetState(CurrState);
         CurrState = state;
 
         switch(CurrState)
         {
-            case State.Idle:
+            case State.Patrol:
                 break;
             case State.GettingHijacked:
                 InitGettingHijackedState();
@@ -142,7 +176,7 @@ public class Enemy : MonoBehaviour
 
     #endregion
 
-    private bool GetIsEnemyOffscreen()
+    private bool GetIsEnemyTooFarAway()
     {
         bool playerTravelingRight = m_Player.TravelDir == 1;
         float unitsHeight = Camera.main.orthographicSize * 2f;
@@ -168,38 +202,27 @@ public class Enemy : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
+        float unitsHeight = Camera.main.orthographicSize * 2f;
+        float aspectRatio = (float)Screen.width / (float)Screen.height;
+        float unitsWidth = unitsHeight * aspectRatio;
+
         m_DisplayRoot.transform.localScale = new Vector3(TravelDir, 1f, 1f);
 
-        if(CurrState != State.PlayerControlled)
+        if(CurrState == State.Patrol)
         {
             bool playerTravelingRight = m_Player.TravelDir == 1;
             Vector3 vel = Vector3.zero;
             //To make sure enemy stays at screen position when player gets in contact
             //with the hatch
             if (CurrState != State.GettingHijacked)
-                vel = new Vector3(-kEnemySpeed * m_Player.TravelDir, 0f, 0f);
+                vel = new Vector3(-kEnemySpeed * TravelDir, 0f, 0f);
 
             transform.position += vel * Time.deltaTime;
 
-            float unitsHeight = Camera.main.orthographicSize * 2f;
-            float aspectRatio = (float)Screen.width / (float)Screen.height;
-            float unitsWidth = unitsHeight * aspectRatio;
-
-            if (((playerTravelingRight && transform.position.x < unitsWidth * .5f) ||
-                (!playerTravelingRight && transform.position.x > -unitsWidth * .5f)) &&
-               m_SpawnPointer != null)
+            if (GetIsEnemyTooFarAway())
             {
-                Destroy(m_SpawnPointer);
-                m_SpawnPointer = null;
-
-                m_SpawnPointerScaleSequence.Kill();
-                m_SpawnPointerScaleSequence = null;
-            }
-
-            if (GetIsEnemyOffscreen())
-            {
-                DistanceIntervalEnemySpawner.RemoveEnemy(this);
-                Destroy(gameObject);
+                Remove();
+                return;
             }
         }
 
@@ -217,10 +240,6 @@ public class Enemy : MonoBehaviour
 
                 Destroy(m_HijackedMeterUI.gameObject);
                 m_HijackedMeterUI = null;
-
-                float unitsHeight = Camera.main.orthographicSize * 2f;
-                float aspectRatio = (float)Screen.width / (float)Screen.height;
-                float unitsWidth = unitsHeight * aspectRatio;
 
                 if (m_AnchorShipToScreenEdgeTween != null)
                     m_AnchorShipToScreenEdgeTween.Kill();
@@ -275,6 +294,22 @@ public class Enemy : MonoBehaviour
                 transform.position += vel;
             if(Input.GetKey(KeyCode.DownArrow))
                 transform.position -= vel;
+        }
+
+        //Show/hide spawn marker whether enemy is on screen or not
+        bool enemyInScreenBounds = transform.position.x > -unitsWidth * .5f && transform.position.x < unitsWidth * .5f;
+        m_SpawnPointerSprite.enabled = !enemyInScreenBounds;
+
+        //Anchor marker based on where enemy is offscreen
+        if(m_SpawnPointerSprite.enabled)
+        {
+            float screenPosX = unitsWidth * .5f - 1f;
+            if (transform.position.x < unitsWidth * .5f)
+                screenPosX = -unitsWidth * .5f + 1f;
+            
+            m_SpawnPointer.transform.position = new Vector3(screenPosX, 
+                                                            m_SpawnPointer.transform.position.y, 
+                                                            m_SpawnPointer.transform.position.z);
         }
     }
 }

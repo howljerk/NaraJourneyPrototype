@@ -1,5 +1,7 @@
-﻿using DG.Tweening;
+﻿using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class SideviewPlayer : MonoBehaviour
 {
@@ -45,6 +47,12 @@ public class SideviewPlayer : MonoBehaviour
 
     //Go-to state vars
     private GameObject m_GoToPointer;
+    private Vector2 m_GoToSrcPos;
+    private Vector2 m_GoToDestPos;
+    private Vector2 m_GoToTravelDir;
+    private float m_GoToTravelTime = 0f;
+    private Tweener m_GoToTween;
+    private const float kGoToUnitsPerSec = 6f;
 
     //Flight state vars
 
@@ -57,7 +65,9 @@ public class SideviewPlayer : MonoBehaviour
     private bool m_IsOpening = false;
 
     //Controlling enemy state vars
-    private Enemy m_ControlledEnemy;
+    private List<Enemy> m_OwnedEnemies;
+    private Enemy m_CurrentAttachedEnemy;
+    private Enemy m_CurrentControlledEnemy;
 
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
@@ -66,12 +76,15 @@ public class SideviewPlayer : MonoBehaviour
     private float m_ScreenUnitsWidth = 0f;
     private float m_ScreenUnitsHeight = 0f;
     private Vector3 m_InitScale = Vector3.one;
+    private Button m_EnterOrLeaveShipBtn = null;
 
     private Vector2 m_DistTraveledFromStart = Vector2.zero;
     public Vector2 DistTraveledFromStart { get { return m_DistTraveledFromStart; } }
 
     private void Awake()
     {
+        m_OwnedEnemies = new List<Enemy>();
+
         m_InitScale = transform.localScale;
 
         m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
@@ -91,15 +104,10 @@ public class SideviewPlayer : MonoBehaviour
         GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
     }
 
-    private Vector2 m_PressedMousePosition;
-    private bool m_MousePressed = false;
-
-    private Vector2 m_GoToSrcPos;
-    private Vector2 m_GoToDestPos;
-    private Vector2 m_GoToTravelDir;
-    private float m_GoToTravelTime = 0f;
-    private Tweener m_GoToTween;
-    private const float kGoToUnitsPerSec = 6f;
+    private void Start()
+    {
+        m_EnterOrLeaveShipBtn = GameHUD.Instance.LeaveOrEnterShipButton;
+    }
 
     private void Update()
     {
@@ -254,6 +262,26 @@ public class SideviewPlayer : MonoBehaviour
         if(m_PlayerState != State.OnHatch)
             HandleMoveStep(moveVecThisFrame);
 
+        //Check to see if player is close to any enemies that are controlled. If yes,
+        //we show the enter/leave button
+        if(m_PlayerState != State.ControllingEnemy && 
+           m_PlayerState != State.OnHatch)
+        {
+            bool inRangeOfAny = false;
+            if (m_CurrentControlledEnemy == null)
+            {
+                foreach (Enemy e in m_OwnedEnemies)
+                {
+                    float dist = (transform.position - e.transform.position).magnitude;
+                    inRangeOfAny = (dist <= 5f);
+                    if (inRangeOfAny)
+                        break;
+                }
+            }
+            m_EnterOrLeaveShipBtn.gameObject.SetActive(inRangeOfAny);
+        }
+        //
+
         float bgWorldStep = m_BackgroundScroller.GetMoveStep() * .05f;
 
         //m_DistTraveledFromStart += new Vector2(bgWorldStep, 0f);
@@ -377,7 +405,7 @@ public class SideviewPlayer : MonoBehaviour
 
     private void InitDamagedState()
     {
-        m_Animations.Play("Idle");
+        m_Animations.Play("Damaged");
         m_PlayerState = State.Damaged;
     }
 
@@ -422,7 +450,11 @@ public class SideviewPlayer : MonoBehaviour
         m_PlayerState = State.ControllingEnemy;
         m_BackgroundScroller.SetScrollSpeed(0f);
 
-        GameHUD.Instance.LeaveOrEnterShipButton.gameObject.SetActive(true);
+        m_CurrentControlledEnemy = m_CurrentAttachedEnemy;
+        m_CurrentAttachedEnemy = null;
+        m_OwnedEnemies.Add(m_CurrentControlledEnemy);
+
+        m_EnterOrLeaveShipBtn.gameObject.SetActive(true);
     }
 
     #endregion
@@ -485,6 +517,10 @@ public class SideviewPlayer : MonoBehaviour
         {
             //Now that we're attached to enemy, keep it in screen space
             Enemy enemy = otherCollider.GetComponentInParent<Enemy>();
+
+            if(m_OwnedEnemies.IndexOf(enemy) != -1)
+                return; 
+            
             enemy.transform.SetParent(m_ScreenRoot);
             enemy.SetState(Enemy.State.GettingHijacked);
 
@@ -493,7 +529,7 @@ public class SideviewPlayer : MonoBehaviour
             transform.localPosition = new Vector3(0f, 0f, -1f);
             transform.localScale = new Vector3(1.5f, 1.5f, 1f);
 
-            m_ControlledEnemy = enemy;
+            m_CurrentAttachedEnemy = enemy;
 
             ResetStateVars(State.OnHatch);
             if(m_PlayerState != State.OnHatch)
@@ -522,10 +558,15 @@ public class SideviewPlayer : MonoBehaviour
         {
             //If we get here, trying to leave ship
 
-            Vector3 leaveEnemyPos = m_ControlledEnemy.transform.localPosition + m_ControlledEnemy.transform.right * 2f;
+            Vector3 leaveEnemyPos = m_CurrentControlledEnemy.transform.localPosition + m_CurrentControlledEnemy.transform.right * 2f;
             transform.SetParent(m_ScreenRoot.transform, false);
             transform.localPosition = leaveEnemyPos;
             transform.localScale = m_InitScale;
+
+            //Put controlled enemy back into world space
+            m_CurrentControlledEnemy.transform.SetParent(m_WorldRoot, true);
+            m_CurrentControlledEnemy.SetState(Enemy.State.PlayerControlledIdle);
+            m_CurrentControlledEnemy = null;
 
             ResetStateVars(State.ControllingEnemy);
             InitIdleState();
@@ -533,7 +574,31 @@ public class SideviewPlayer : MonoBehaviour
             return;
         }
 
-        //If we get here, trying to enter ship
+        //If we get here, try to enter ship. Since player could click on button, had to be
+        //close to an enemy
+        float lowestDist = float.MaxValue;
+        Enemy closestEnemy = null;
+        foreach (Enemy e in m_OwnedEnemies)
+        {
+            float dist = (transform.position - e.transform.position).magnitude;
+            if(dist < lowestDist)
+            {
+                lowestDist = dist;
+                closestEnemy = e;
+            }
+        }
+
+        if (closestEnemy == null)
+            return;
+
+        m_CurrentControlledEnemy = closestEnemy;
+        m_CurrentControlledEnemy.SetState(Enemy.State.PlayerControlled);
+        m_CurrentControlledEnemy.transform.SetParent(m_ScreenRoot);
+        m_CurrentAttachedEnemy = null;
+
+        m_Animations.Play("InEnemy");
+        m_PlayerState = State.ControllingEnemy;
+        m_BackgroundScroller.SetScrollSpeed(0f);
     }
 
     public void OnIntroDone()

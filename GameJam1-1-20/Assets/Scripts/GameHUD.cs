@@ -24,5 +24,7 @@ public class GameHUD : MonoBehaviour
             OnLeaveOrEnterShipButtonTapped?.Invoke();   
         });
         m_LeaveOrEnterShipButton.gameObject.SetActive(false);
+
+        Enemy.OnSuccessfullyHijacked += () => m_LeaveOrEnterShipButtonLabel.text = "Leave Ship";
     }
 }
