@@ -56,6 +56,7 @@ public class Enemy : MonoBehaviour
     private float m_IsOpeningTotalTime;
     private Tweener m_AnimateHatchTween;
     private Tweener m_AnchorShipToScreenEdgeTween;
+    private Tweener m_FlightTween;
 
     //Player controlled state vars
     private bool m_IsMovingForward;
@@ -243,7 +244,14 @@ public class Enemy : MonoBehaviour
                 if(!m_IsMovingForward)
                 {
                     m_IsMovingForward = true;
-                    DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 0, SideviewPlayer.kFlightMaxScrollSpeed, 5f);
+
+                    if (m_FlightTween != null)
+                        m_FlightTween.Kill();
+                    
+                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 
+                                               0, 
+                                               SideviewPlayer.kFlightMaxScrollSpeed, 
+                                               2f);
                 }
             }
             else if(Input.GetKeyUp(KeyCode.LeftCommand))
@@ -251,7 +259,14 @@ public class Enemy : MonoBehaviour
                 if (m_IsMovingForward)
                 {
                     m_IsMovingForward = false;
-                    DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 0, 0f, 5f);
+
+                    if (m_FlightTween != null)
+                        m_FlightTween.Kill();
+                    
+                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 
+                                               m_BackgroundScroller.GetScrollSpeed(), 
+                                               0f, 
+                                               2f);
                 }
             }
 

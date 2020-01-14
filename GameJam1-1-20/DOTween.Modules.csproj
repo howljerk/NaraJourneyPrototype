@@ -70,13 +70,13 @@
     <Compile Include="Assets\DOTween\Modules\DOTweenModuleUnityVersion.cs" />
     <Compile Include="Assets\DOTween\Modules\DOTweenModuleUtils.cs" />
     <Reference Include="UnityEditor.UI">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
     </Reference>
     <Reference Include="Unity.2D.Tilemap.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>/Applications/Unity/Unity.app/Contents/Managed/UnityEngine/UnityEngine.AIModule.dll</HintPath>
@@ -274,10 +274,10 @@
       <HintPath>/Applications/Visual Studio.app/Contents/Resources/lib/monodevelop/AddIns/MonoDevelop.Unity/Editor/SyntaxTree.VisualStudio.Unity.Bridge.dll</HintPath>
     </Reference>
     <Reference Include="DOTween">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Assets/DOTween/DOTween.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Assets/DOTween/DOTween.dll</HintPath>
     </Reference>
     <Reference Include="DOTweenEditor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Assets/DOTween/Editor/DOTweenEditor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Assets/DOTween/Editor/DOTweenEditor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEditor.iOS.Extensions.Xcode">
       <HintPath>/Applications/Unity/PlaybackEngines/iOSSupport/UnityEditor.iOS.Extensions.Xcode.dll</HintPath>

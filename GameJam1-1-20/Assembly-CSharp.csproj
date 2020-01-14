@@ -65,45 +65,47 @@
     <Compile Include="Assets\Scripts\Background\BackgroundScroller.cs" />
     <Compile Include="Assets\Scripts\Background\HorizontalScroller.cs" />
     <Compile Include="Assets\Scripts\Background\VerticalScroller.cs" />
+    <Compile Include="Assets\Scripts\BackgroundTap.cs" />
     <Compile Include="Assets\Scripts\DistanceIntervalEnemySpawner.cs" />
     <Compile Include="Assets\Scripts\Enemy.cs" />
+    <Compile Include="Assets\Scripts\GameHUD.cs" />
     <Compile Include="Assets\Scripts\HijackUI.cs" />
     <Compile Include="Assets\Scripts\Player.cs" />
     <Compile Include="Assets\Scripts\SideviewPlayer.cs" />
     <Compile Include="Assets\Scripts\WorldGrid.cs" />
     <None Include="Assets\DOTween\readme.txt" />
     <Reference Include="Unity.Timeline.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.Timeline.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.VSCode.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.VSCode.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.VSCode.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.TextMeshPro.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.TextMeshPro.Editor.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.UI">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/UnityEngine.UI.dll</HintPath>
     </Reference>
     <Reference Include="Unity.Timeline">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.Timeline.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.Timeline.dll</HintPath>
     </Reference>
     <Reference Include="Unity.CollabProxy.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.CollabProxy.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.CollabProxy.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.Rider.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.Rider.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.Rider.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.2D.Sprite.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Sprite.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Sprite.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.2D.Tilemap.Editor">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.2D.Tilemap.Editor.dll</HintPath>
     </Reference>
     <Reference Include="Unity.TextMeshPro">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/Unity.TextMeshPro.dll</HintPath>
     </Reference>
     <Reference Include="UnityEditor.UI">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Library/ScriptAssemblies/UnityEditor.UI.dll</HintPath>
     </Reference>
     <Reference Include="UnityEngine.AIModule">
       <HintPath>/Applications/Unity/Unity.app/Contents/Managed/UnityEngine/UnityEngine.AIModule.dll</HintPath>
@@ -283,7 +285,7 @@
       <HintPath>/Applications/Unity/Unity.app/Contents/Managed/UnityEngine/UnityEngine.XRModule.dll</HintPath>
     </Reference>
     <Reference Include="DOTween">
-      <HintPath>/Users/michaelromero/Documents/NaraJourney/GameJam1-1-20/Assets/DOTween/DOTween.dll</HintPath>
+      <HintPath>/Users/michaelromero/Documents/NaraJourneyPrototype/GameJam1-1-20/Assets/DOTween/DOTween.dll</HintPath>
     </Reference>
     <Reference Include="UnityEditor.iOS.Extensions.Xcode">
       <HintPath>/Applications/Unity/PlaybackEngines/iOSSupport/UnityEditor.iOS.Extensions.Xcode.dll</HintPath>

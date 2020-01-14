@@ -28,6 +28,7 @@ public class SideviewPlayer : MonoBehaviour
     [SerializeField] private GameObject m_GoToPointerPrefab;
     [SerializeField] private Transform m_ScreenRoot;
     [SerializeField] private BoxCollider2D m_BoxCollider;
+    [SerializeField] private BackgroundTap m_BackgroundTap;
 
     //Idle state vars
     private float m_IdleScrollSpeed = 0f;
@@ -55,18 +56,24 @@ public class SideviewPlayer : MonoBehaviour
     //On Hatch state vars
     private bool m_IsOpening = false;
 
+    //Controlling enemy state vars
+    private Enemy m_ControlledEnemy;
+
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
     private Vector2 m_ScreenMoveMin = Vector2.zero;
     private Vector2 m_ScreenMoveMax = Vector2.zero;
     private float m_ScreenUnitsWidth = 0f;
     private float m_ScreenUnitsHeight = 0f;
+    private Vector3 m_InitScale = Vector3.one;
 
     private Vector2 m_DistTraveledFromStart = Vector2.zero;
     public Vector2 DistTraveledFromStart { get { return m_DistTraveledFromStart; } }
 
     private void Awake()
     {
+        m_InitScale = transform.localScale;
+
         m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
         float aspectRatio = (float)Screen.width / (float)Screen.height;
         m_ScreenUnitsWidth = m_ScreenUnitsHeight * aspectRatio;
@@ -81,6 +88,7 @@ public class SideviewPlayer : MonoBehaviour
         m_JumpBoostRightArrow.gameObject.SetActive(false);
 
         Enemy.OnSuccessfullyHijacked += OnSuccessfullyHijackedEnemy;
+        GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
     }
 
     private Vector2 m_PressedMousePosition;
@@ -116,6 +124,8 @@ public class SideviewPlayer : MonoBehaviour
         //}
 
         Vector2 moveVecThisFrame = Vector2.zero;
+        bool bgInputDown = m_BackgroundTap.GetHasInput();
+        bool bgInputUp = m_BackgroundTap.GetHasInputUp();
 
         if (nextState == State.Flight)
         {
@@ -126,7 +136,7 @@ public class SideviewPlayer : MonoBehaviour
         }
 
         //Detect to go into jump boost state
-        if (Input.GetMouseButton(0) && 
+        if (bgInputDown && 
             !m_StartedBoostPath && 
             m_PlayerState != State.Damaged && 
             m_PlayerState != State.OnHatch)
@@ -145,8 +155,8 @@ public class SideviewPlayer : MonoBehaviour
                 if (m_PlayerState != nextState)
                     InitJumpBoostState();
 
-                Vector3 playerScreenPos = Camera.main.WorldToScreenPoint(transform.position);
-                Vector3 arrowDirPos = Input.mousePosition;
+                Vector2 playerScreenPos = Camera.main.WorldToScreenPoint(transform.position);
+                Vector2 arrowDirPos = Input.mousePosition;
                 Vector2 lookAt = (arrowDirPos - playerScreenPos).normalized;
 
                 float jumpBoostAngle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
@@ -169,7 +179,7 @@ public class SideviewPlayer : MonoBehaviour
 
         //On mouse up, see if we've been jump boost state, if not, see if there was no other state set, that
         //would mean we can do our go-to.
-        if (Input.GetMouseButtonUp(0) && 
+        if (bgInputUp && 
             m_PlayerState != State.Damaged &&
             m_PlayerState != State.OnHatch)
         {
@@ -201,7 +211,7 @@ public class SideviewPlayer : MonoBehaviour
         if(m_PlayerState == State.OnHatch)
         {
             //Maybe should be detecting hold down on UI button
-            if(Input.GetMouseButton(0))
+            if(bgInputDown)
             {
                 if(!m_IsOpening)
                 {
@@ -210,7 +220,7 @@ public class SideviewPlayer : MonoBehaviour
                     OnStartedOpeningInHijack?.Invoke();
                 }
             }
-            else if(Input.GetMouseButtonUp(0))
+            else if(bgInputUp)
             {
                 if(m_IsOpening)
                 {
@@ -411,6 +421,8 @@ public class SideviewPlayer : MonoBehaviour
         m_Animations.Play("InEnemy");
         m_PlayerState = State.ControllingEnemy;
         m_BackgroundScroller.SetScrollSpeed(0f);
+
+        GameHUD.Instance.LeaveOrEnterShipButton.gameObject.SetActive(true);
     }
 
     #endregion
@@ -447,6 +459,7 @@ public class SideviewPlayer : MonoBehaviour
                 m_PressedForBoost = m_StartedBoostPath = false;
                 m_PressedForBoostStartTime = 0f;
                 m_JumpBoostRightArrow.localScale = Vector3.one;
+                m_BoostVelocity = m_BoostAcceleration = Vector2.zero;
                 break;
             case State.Flight:
                 DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), kFlightMaxScrollSpeed, 0, 2f);
@@ -480,6 +493,8 @@ public class SideviewPlayer : MonoBehaviour
             transform.localPosition = new Vector3(0f, 0f, -1f);
             transform.localScale = new Vector3(1.5f, 1.5f, 1f);
 
+            m_ControlledEnemy = enemy;
+
             ResetStateVars(State.OnHatch);
             if(m_PlayerState != State.OnHatch)
                 InitOnHatchState();
@@ -499,6 +514,26 @@ public class SideviewPlayer : MonoBehaviour
             m_DamagedAcceleration = m_DamagedVelocity = m_DamagedDir * 20f;
             InitDamagedState();
         }
+    }
+
+    private void OnEnterOrLeaveShipHUDButtonClicked()
+    {
+        if(m_PlayerState == State.ControllingEnemy)
+        {
+            //If we get here, trying to leave ship
+
+            Vector3 leaveEnemyPos = m_ControlledEnemy.transform.localPosition + m_ControlledEnemy.transform.right * 2f;
+            transform.SetParent(m_ScreenRoot.transform, false);
+            transform.localPosition = leaveEnemyPos;
+            transform.localScale = m_InitScale;
+
+            ResetStateVars(State.ControllingEnemy);
+            InitIdleState();
+
+            return;
+        }
+
+        //If we get here, trying to enter ship
     }
 
     public void OnIntroDone()
