@@ -46,9 +46,7 @@ public class Enemy : MonoBehaviour
 
     public const float kEnemySpeed = 4f;
 
-    private GameObject m_SpawnPointer;
-    private SpriteRenderer m_SpawnPointerSprite;
-    private Sequence m_SpawnPointerScaleSequence;
+    private SpawnMarker m_SpawnMarker;
     private BoxCollider2D m_HatchBoxCollider;
     private SpriteRenderer m_HatchSprite;
     private HijackUI m_HijackedMeterUI;
@@ -58,14 +56,36 @@ public class Enemy : MonoBehaviour
     private Tweener m_AnimateHatchTween;
     private Tweener m_AnchorShipToScreenEdgeTween;
     private Tweener m_FlightTween;
+    private Vector2 m_ScreenMoveMin = Vector2.zero;
+    private Vector2 m_ScreenMoveMax = Vector2.zero;
+    private float m_ScreenUnitsWidth = 0f;
+    private float m_ScreenUnitsHeight = 0f;
+    private const float kScreenHEdgeMargin = 3f;
+    private const float kScreenVEdgeMargin = 1f;
+
+    //Crashed state vars
+    private bool m_DidCrash = false;
+    private Vector2 m_CrashedAccel;
+    private Vector2 m_CrashedVel;
+    private Vector2 m_CrashedDir;
+    private Tweener m_CrashPunchScaleTween;
 
     //Player controlled state vars
     private bool m_IsMovingForward;
 
     public State CurrState { get; set; } = State.Patrol;
 
-    // Start is called before the first frame update
-    void Start()
+    private void Awake()
+    {
+        m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
+        float aspectRatio = (float)Screen.width / (float)Screen.height;
+        m_ScreenUnitsWidth = m_ScreenUnitsHeight * aspectRatio;
+
+        m_ScreenMoveMin = new Vector2(-m_ScreenUnitsWidth * .5f + kScreenHEdgeMargin, -m_ScreenUnitsHeight * .5f + kScreenVEdgeMargin);
+        m_ScreenMoveMax = new Vector2(m_ScreenUnitsWidth * .5f - kScreenHEdgeMargin, m_ScreenUnitsHeight * .5f - kScreenVEdgeMargin);
+    }
+
+    private void Start()
     {
         m_HatchBoxCollider = m_Hatch.GetComponent<BoxCollider2D>();
         m_HatchSprite = m_Hatch.GetComponentInChildren<SpriteRenderer>();
@@ -84,18 +104,10 @@ public class Enemy : MonoBehaviour
         Vector3 enemyScreenPos = m_ScreenRoot.InverseTransformPoint(transform.position);
         Vector3 pointerPos = new Vector3((unitsWidth * .5f - 1f) * m_Player.TravelDir, enemyScreenPos.y, enemyScreenPos.z);
 
-        m_SpawnPointer = Instantiate(m_SpawnPointerPrefab, m_ScreenRoot);
-        m_SpawnPointer.transform.localPosition = pointerPos;
-        m_SpawnPointerSprite = m_SpawnPointer.GetComponent<SpriteRenderer>();
-
-        System.Action doSequence = null;
-        doSequence = () =>
-        {
-            m_SpawnPointerScaleSequence = DOTween.Sequence();
-            m_SpawnPointerScaleSequence.Append(m_SpawnPointer.transform.DOPunchScale(new Vector3(2f, 2f, 1f), .2f));
-            m_SpawnPointerScaleSequence.AppendCallback(() => doSequence());
-        };
-        doSequence();
+        GameObject pointerObj = Instantiate(m_SpawnPointerPrefab, m_ScreenRoot);
+        pointerObj.transform.localPosition = pointerPos;
+        m_SpawnMarker = pointerObj.GetComponent<SpawnMarker>();
+        m_SpawnMarker.TrackedEntity = gameObject;
     }
 
     private void Remove()
@@ -103,14 +115,9 @@ public class Enemy : MonoBehaviour
         DistanceIntervalEnemySpawner.RemoveEnemy(this);
 
         Destroy(gameObject);
-        Destroy(m_SpawnPointer);
+        Destroy(m_SpawnMarker.gameObject);
 
-        if (m_SpawnPointerScaleSequence != null)
-            m_SpawnPointerScaleSequence.Kill();
-        
-        m_SpawnPointer = null;
-        m_SpawnPointerSprite = null;
-        m_SpawnPointerScaleSequence = null;
+        m_SpawnMarker = null;
     }
 
     private void ResetState(State state)
@@ -121,8 +128,8 @@ public class Enemy : MonoBehaviour
                 {
                     if (m_FlightTween != null)
                         m_FlightTween.Kill();
-                    m_FlightTween = null;
 
+                    m_FlightTween = null;
                     m_IsMovingForward = false;
                 }
                 break;
@@ -140,6 +147,9 @@ public class Enemy : MonoBehaviour
                 break;
             case State.GettingHijacked:
                 InitGettingHijackedState();
+                break;
+            case State.PlayerControlled:
+                m_SpawnMarker.DoTracking = false;
                 break;
         }
     }
@@ -248,7 +258,7 @@ public class Enemy : MonoBehaviour
 
                 m_HatchSprite.gameObject.SetActive(false);
 
-                m_AnchorShipToScreenEdgeTween = transform.DOMoveX(-unitsWidth * .5f + 3f, 1f);
+                m_AnchorShipToScreenEdgeTween = transform.DOMoveX(-unitsWidth * .5f + kScreenHEdgeMargin, 1f);
                 m_IsMovingForward = false;
 
                 OnSuccessfullyHijacked?.Invoke();
@@ -291,25 +301,100 @@ public class Enemy : MonoBehaviour
 
             Vector3 vel = new Vector3(0f, 5f, 0f) * Time.deltaTime; 
             if(Input.GetKey(KeyCode.UpArrow))
-                transform.position += vel;
+                transform.position = GetClampedToScreenAreaPos(transform.position + vel);
             if(Input.GetKey(KeyCode.DownArrow))
-                transform.position -= vel;
+                transform.position = GetClampedToScreenAreaPos(transform.position - vel);
         }
 
-        //Show/hide spawn marker whether enemy is on screen or not
-        bool enemyInScreenBounds = transform.position.x > -unitsWidth * .5f && transform.position.x < unitsWidth * .5f;
-        m_SpawnPointerSprite.enabled = !enemyInScreenBounds;
-
-        //Anchor marker based on where enemy is offscreen
-        if(m_SpawnPointerSprite.enabled)
+        if(m_DidCrash)
         {
-            float screenPosX = unitsWidth * .5f - 1f;
-            if (transform.position.x < unitsWidth * .5f)
-                screenPosX = -unitsWidth * .5f + 1f;
+            Vector2 nextPos = transform.position + (Vector3)m_CrashedVel * Time.deltaTime;
+            float velDot = Vector2.Dot(m_CrashedDir, (nextPos - (Vector2)transform.position).normalized);
+
+            bool nextPosWillBeOutsideScreenArea = nextPos.x > m_ScreenMoveMax.x ||
+                                                 nextPos.x < m_ScreenMoveMin.x ||
+                                                 nextPos.y > m_ScreenMoveMax.y ||
+                                                 nextPos.y < m_ScreenMoveMin.y;
             
-            m_SpawnPointer.transform.position = new Vector3(screenPosX, 
-                                                            m_SpawnPointer.transform.position.y, 
-                                                            m_SpawnPointer.transform.position.z);
+            bool clampPosToScreenArea = CurrState != State.Patrol && nextPosWillBeOutsideScreenArea;
+
+            if (velDot > 0f)
+            {
+                transform.position = nextPos;
+                m_CrashedVel -= m_CrashedAccel * Time.deltaTime;
+
+                if (clampPosToScreenArea)
+                {
+                    m_DidCrash = false;
+
+                    //We need to clamp position to screen boundaries...so do that here.
+                    transform.position = GetClampedToScreenAreaPos(transform.position);
+                }
+            }
+            else
+            {
+                m_DidCrash = false;
+            }
         }
+    }
+
+    private Vector3 GetClampedToScreenAreaPos(Vector3 pos)
+    {
+        float clampedX = pos.x;
+        if (clampedX < m_ScreenMoveMin.x)
+            clampedX = m_ScreenMoveMin.x;
+        if (clampedX > m_ScreenMoveMax.x)
+            clampedX = m_ScreenMoveMax.x;
+
+        float clampedY = pos.y;
+        if (clampedY < m_ScreenMoveMin.y)
+            clampedY = m_ScreenMoveMin.y;
+        if (clampedY > m_ScreenMoveMax.y)
+            clampedY = m_ScreenMoveMax.y;
+
+        return new Vector3(clampedX, clampedY, pos.z);
+    }
+
+    private void OnTriggerEnter2D(Collider2D otherCollider)
+    {
+        if (otherCollider.tag != "Enemy")
+            return;
+
+        Enemy otherEnemy = otherCollider.GetComponent<Enemy>();
+
+        if(m_CrashPunchScaleTween == null)
+        {
+            m_CrashPunchScaleTween = transform.DOPunchScale(new Vector3(.4f, .4f, 1f), .3f, 20);
+            m_CrashPunchScaleTween.onComplete = () => m_CrashPunchScaleTween = null;
+        }
+        if (otherEnemy.m_CrashPunchScaleTween == null)
+        {
+            otherEnemy.m_CrashPunchScaleTween = otherEnemy.transform.DOPunchScale(new Vector3(.4f, .4f, 1f), .3f, 20);
+            otherEnemy.m_CrashPunchScaleTween.onComplete = () => otherEnemy.m_CrashPunchScaleTween = null;
+        }
+
+        OnCrashedIntoOtherEnemyShip(otherEnemy);
+    }
+
+    private void OnTriggerStay2D(Collider2D otherCollider)
+    {
+        if (otherCollider.tag != "Enemy")
+            return;
+
+        Enemy otherEnemy = otherCollider.GetComponent<Enemy>();
+        OnCrashedIntoOtherEnemyShip(otherEnemy);
+    }
+
+    private void OnCrashedIntoOtherEnemyShip(Enemy otherEnemy)
+    {
+        otherEnemy.m_DidCrash = true;
+        otherEnemy.m_CrashedDir = (otherEnemy.transform.position - transform.position).normalized;
+        otherEnemy.m_CrashedVel = otherEnemy.m_CrashedDir * 20f;
+        otherEnemy.m_CrashedAccel = otherEnemy.m_CrashedVel * 4f;
+
+        m_DidCrash = true;
+        m_CrashedDir = (transform.position - otherEnemy.transform.position).normalized;
+        m_CrashedVel = m_CrashedDir * 20f;
+        m_CrashedAccel = m_CrashedVel * 4f;
     }
 }

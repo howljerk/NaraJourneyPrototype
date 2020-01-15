@@ -280,7 +280,11 @@ public class SideviewPlayer : MonoBehaviour
             }
             m_EnterOrLeaveShipBtn.gameObject.SetActive(inRangeOfAny);
         }
-        //
+        else if(m_PlayerState == State.ControllingEnemy &&
+                !m_EnterOrLeaveShipBtn.gameObject.activeSelf)
+        {
+            m_EnterOrLeaveShipBtn.gameObject.SetActive(true);
+        }
 
         float bgWorldStep = m_BackgroundScroller.GetMoveStep() * .05f;
 
@@ -453,6 +457,8 @@ public class SideviewPlayer : MonoBehaviour
         m_CurrentControlledEnemy = m_CurrentAttachedEnemy;
         m_CurrentAttachedEnemy = null;
         m_OwnedEnemies.Add(m_CurrentControlledEnemy);
+
+        m_CurrentControlledEnemy.SetState(Enemy.State.PlayerControlled);
 
         m_EnterOrLeaveShipBtn.gameObject.SetActive(true);
     }

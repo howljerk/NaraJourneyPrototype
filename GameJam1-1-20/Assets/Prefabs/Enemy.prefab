@@ -100,6 +100,7 @@ GameObject:
   - component: {fileID: -2565311244699586202}
   - component: {fileID: 3342811300162126773}
   - component: {fileID: 3873609089385606197}
+  - component: {fileID: -7977362753563968774}
   m_Layer: 0
   m_Name: Enemy
   m_TagString: Enemy
@@ -138,7 +139,7 @@ MonoBehaviour:
   m_SpawnPointerPrefab: {fileID: 3638073200645131319, guid: 04579a69e078745bbbba917d57222a8b,
     type: 3}
   m_Hatch: {fileID: 1350210910327882849}
-  m_BoxCollider: {fileID: 0}
+  m_BoxCollider: {fileID: 3873609089385606197}
   m_DisplayRoot: {fileID: 7023822841661967226}
   m_HijackedUIAnchor: {fileID: 2455155972820066667}
   m_HijackedPrefab: {fileID: 3942620318917595702, guid: 7639857cb23f84e73a22afb5e15e7de0,
@@ -188,6 +189,27 @@ BoxCollider2D:
   serializedVersion: 2
   m_Size: {x: 0.9, y: 0.4}
   m_EdgeRadius: 0
+--- !u!50 &-7977362753563968774
+Rigidbody2D:
+  serializedVersion: 4
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2750838016956828985}
+  m_BodyType: 1
+  m_Simulated: 1
+  m_UseFullKinematicContacts: 0
+  m_UseAutoMass: 0
+  m_Mass: 1
+  m_LinearDrag: 0
+  m_AngularDrag: 0.05
+  m_GravityScale: 1
+  m_Material: {fileID: 0}
+  m_Interpolate: 0
+  m_SleepingMode: 1
+  m_CollisionDetection: 0
+  m_Constraints: 0
 --- !u!1 &3014115772058175112
 GameObject:
   m_ObjectHideFlags: 0
