@@ -444,7 +444,8 @@ public class SideviewPlayer : MonoBehaviour
     {
         m_Animations.Play("Idle");
         m_PlayerState = State.OnHatch;
-        m_BackgroundScroller.SetScrollSpeed(-Enemy.kEnemySpeed);
+        //m_BackgroundScroller.SetScrollSpeed(-Enemy.kEnemySpeed);
+        m_BackgroundScroller.SetScrollSpeed(0f);
         m_IsOpening = false;
     }
 
@@ -452,7 +453,7 @@ public class SideviewPlayer : MonoBehaviour
     {
         m_Animations.Play("InEnemy");
         m_PlayerState = State.ControllingEnemy;
-        m_BackgroundScroller.SetScrollSpeed(0f);
+        //m_BackgroundScroller.SetScrollSpeed(0f);
 
         m_CurrentControlledEnemy = m_CurrentAttachedEnemy;
         m_CurrentAttachedEnemy = null;
@@ -536,6 +537,7 @@ public class SideviewPlayer : MonoBehaviour
             transform.localScale = new Vector3(1.5f, 1.5f, 1f);
 
             m_CurrentAttachedEnemy = enemy;
+
 
             ResetStateVars(State.OnHatch);
             if(m_PlayerState != State.OnHatch)

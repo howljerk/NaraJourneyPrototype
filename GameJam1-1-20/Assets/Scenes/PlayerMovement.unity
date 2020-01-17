@@ -507,6 +507,8 @@ MonoBehaviour:
   m_BackgroundScroller: {fileID: 257009999}
   m_EnemyPrefab: {fileID: 2750838016956828985, guid: 027ac5fcecbaa43d0948af2c9b390ff7,
     type: 3}
+  m_EnemyTier2Prefab: {fileID: 2886224622178789386, guid: fbc9a490a336c43ed950026ab8c07da3,
+    type: 3}
   m_Player: {fileID: 582959647}
   m_WorldGrid: {fileID: 0}
   m_SpawnPointerPrefab: {fileID: 3638073200645131319, guid: 04579a69e078745bbbba917d57222a8b,

@@ -7,7 +7,7 @@ public class SpawnMarker : MonoBehaviour
     [SerializeField] private SpriteRenderer m_LeftArrow;
     [SerializeField] private SpriteRenderer m_RightArrow;
 
-    public GameObject TrackedEntity { get; set; }
+    public IMarkerTrackedEntity TrackedEntity { get; set; }
     public bool DoTracking { get; set; } = true;
 
     private Sequence m_SpawnPointerScaleSequence;
@@ -38,7 +38,9 @@ public class SpawnMarker : MonoBehaviour
         float aspectRatio = (float)Screen.width / (float)Screen.height;
         float unitsWidth = unitsHeight * aspectRatio;
 
-        bool outOfBounds = !(TrackedEntity.transform.position.x > -unitsWidth * .5f && TrackedEntity.transform.position.x < unitsWidth * .5f);
+        Vector3 pos = TrackedEntity.GetPosition();
+
+        bool outOfBounds = !(pos.x > -unitsWidth * .5f && pos.x < unitsWidth * .5f);
 
         m_Icon.enabled = outOfBounds;
 
@@ -46,20 +48,16 @@ public class SpawnMarker : MonoBehaviour
         if (m_Icon.enabled)
         {
             float screenPosX = unitsWidth * .5f - 1f;
-            bool anchoredToRight = true;
 
-            if (TrackedEntity.transform.position.x < unitsWidth * .5f)
-            {
+            if (pos.x < unitsWidth * .5f)
                 screenPosX = -unitsWidth * .5f + 1f;
-                anchoredToRight = false;
-            }
 
             transform.position = new Vector3(screenPosX,
                                            transform.position.y,
                                            transform.position.z);
 
-            m_LeftArrow.enabled = !anchoredToRight;
-            m_RightArrow.enabled = anchoredToRight;
+            m_LeftArrow.enabled = TrackedEntity.GetTrackingDir() == -1;
+            m_RightArrow.enabled = TrackedEntity.GetTrackingDir() == 1;
         }
         else
         {

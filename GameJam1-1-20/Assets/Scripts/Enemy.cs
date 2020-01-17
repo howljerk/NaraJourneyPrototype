@@ -1,9 +1,10 @@
-﻿using DG.Tweening;
+﻿using System.Collections.Generic;
+using DG.Tweening;
 using UnityEngine;
 
-public class Enemy : MonoBehaviour
+public class Enemy : MonoBehaviour, IMarkerTrackedEntity
 {
-    public static event System.Action OnSuccessfullyHijacked; 
+    public static event System.Action OnSuccessfullyHijacked;
 
     public enum State
     {
@@ -13,17 +14,30 @@ public class Enemy : MonoBehaviour
         PlayerControlledIdle
     }
 
+    public enum DifficultTier
+    {
+        Tier1,
+        Tier2
+    }
+
     [SerializeField] private GameObject m_SpawnPointerPrefab;
     [SerializeField] private GameObject m_Hatch;
     [SerializeField] private BoxCollider2D m_BoxCollider;
     [SerializeField] private GameObject m_DisplayRoot;
-    [SerializeField] Transform m_HijackedUIAnchor;
-    [SerializeField] GameObject m_HijackedPrefab;
+    [SerializeField] private Transform m_HijackedUIAnchor;
+    [SerializeField] private GameObject m_HijackedPrefab;
+    [SerializeField] private GameObject m_EnemyMechbotPrefab;
 
     private Transform m_ScreenRoot;
     public void SetScreenRoot(Transform screenRoot)
     {
         m_ScreenRoot = screenRoot;
+    }
+
+    private Transform m_WorldRoot;
+    public void SetWorldRoot(Transform worldRoot)
+    {
+        m_WorldRoot = worldRoot;
     }
 
     private SideviewPlayer m_Player;
@@ -73,7 +87,12 @@ public class Enemy : MonoBehaviour
     //Player controlled state vars
     private bool m_IsMovingForward;
 
+    //Enemy mechbot vars
+    public Bounds[] MechbotScreenGrid { get; private set; }
+    private List<EnemyMechbot> m_Mechbots;
+
     public State CurrState { get; set; } = State.Patrol;
+    public DifficultTier Tier { get; set; } = DifficultTier.Tier1;
 
     private void Awake()
     {
@@ -83,6 +102,33 @@ public class Enemy : MonoBehaviour
 
         m_ScreenMoveMin = new Vector2(-m_ScreenUnitsWidth * .5f + kScreenHEdgeMargin, -m_ScreenUnitsHeight * .5f + kScreenVEdgeMargin);
         m_ScreenMoveMax = new Vector2(m_ScreenUnitsWidth * .5f - kScreenHEdgeMargin, m_ScreenUnitsHeight * .5f - kScreenVEdgeMargin);
+
+        float gridWidth = m_ScreenMoveMax.x;
+        float gridHeight = m_ScreenMoveMax.y;
+
+        //Total screen grid for mechbots to occupy
+
+        MechbotScreenGrid = new Bounds[4];
+        //bottom-left
+        MechbotScreenGrid[0] = new Bounds(new Vector3(m_ScreenMoveMin.x * .5f,
+                                                 m_ScreenMoveMin.y * .5f,
+                                                 transform.position.z),
+                                     new Vector3(gridWidth, gridHeight, 1f));
+        //bottom-right
+        MechbotScreenGrid[1] = new Bounds(new Vector3(m_ScreenMoveMax.x * .5f,
+                                                 m_ScreenMoveMin.y * .5f,
+                                                 transform.position.z),
+                                     new Vector3(gridWidth, gridHeight, 1f));
+        //top-left
+        MechbotScreenGrid[2] = new Bounds(new Vector3(m_ScreenMoveMin.x * .5f,
+                                                 m_ScreenMoveMax.y * .5f,
+                                                 transform.position.z),
+                                     new Vector3(gridWidth, gridHeight, 1f));
+        //top-right
+        MechbotScreenGrid[3] = new Bounds(new Vector3(m_ScreenMoveMax.x * .5f,
+                                                 m_ScreenMoveMax.y * .5f,
+                                                 transform.position.z),
+                                     new Vector3(gridWidth, gridHeight, 1f));
     }
 
     private void Start()
@@ -107,7 +153,7 @@ public class Enemy : MonoBehaviour
         GameObject pointerObj = Instantiate(m_SpawnPointerPrefab, m_ScreenRoot);
         pointerObj.transform.localPosition = pointerPos;
         m_SpawnMarker = pointerObj.GetComponent<SpawnMarker>();
-        m_SpawnMarker.TrackedEntity = gameObject;
+        m_SpawnMarker.TrackedEntity = this;
     }
 
     private void Remove()
@@ -122,7 +168,7 @@ public class Enemy : MonoBehaviour
 
     private void ResetState(State state)
     {
-        switch(state)
+        switch (state)
         {
             case State.PlayerControlled:
                 {
@@ -141,7 +187,7 @@ public class Enemy : MonoBehaviour
         ResetState(CurrState);
         CurrState = state;
 
-        switch(CurrState)
+        switch (CurrState)
         {
             case State.Patrol:
                 break;
@@ -172,6 +218,54 @@ public class Enemy : MonoBehaviour
         m_IsOpeningTimeScale = 0f;
         m_IsOpeningTick = 0f;
         m_IsOpeningTotalTime = 4f;
+
+        //If tier 2, create mechbot. TODO: have mechbot count be configurable
+        if (Tier == DifficultTier.Tier2)
+            CreateMechbot();
+    }
+
+    private void CreateMechbot()
+    {
+        if (m_Mechbots == null)
+            m_Mechbots = new List<EnemyMechbot>();
+
+        int gridIndexToClaim = -1;
+        float maxAnchorDist = float.MinValue;
+        Bounds anchor = new Bounds();
+        Dictionary<int, EnemyMechbot> claimedGridIndices = new Dictionary<int, EnemyMechbot>();
+
+        foreach (EnemyMechbot bot in m_Mechbots)
+            claimedGridIndices[gridIndexToClaim] = bot;
+
+        for (int idx = 0; idx < MechbotScreenGrid.Length; idx++)
+        {
+            Bounds grid = MechbotScreenGrid[idx];
+
+            if (grid.Contains(transform.position) || claimedGridIndices.ContainsKey(idx))
+                continue;
+
+            float anchorDist = (grid.center - transform.position).magnitude;
+            if (anchorDist < maxAnchorDist)
+                continue;
+
+            gridIndexToClaim = idx;
+            maxAnchorDist = anchorDist;
+            anchor = grid;
+        }
+
+        if (gridIndexToClaim == -1)
+        {
+            Debug.LogWarning("EnemyMechbot failed to find its initial anchor point!");
+            return;
+        }
+
+        GameObject mechbotObj = Instantiate(m_EnemyMechbotPrefab);
+        EnemyMechbot mechbot = mechbotObj.GetComponent<EnemyMechbot>();
+        mechbot.LinkedEnemy = this;
+        mechbot.WorldRoot = m_WorldRoot;
+        mechbot.ClaimedGridIndex = gridIndexToClaim;
+
+        m_Mechbots.Add(mechbot);        
     }
 
     private void OnPlayerStartedOpening()
@@ -194,7 +288,7 @@ public class Enemy : MonoBehaviour
         float unitsWidth = unitsHeight * aspectRatio;
         float offscreenX = -unitsWidth * 2f * (playerTravelingRight ? 1 : -1);
 
-        return ((playerTravelingRight && transform.position.x < offscreenX) || 
+        return ((playerTravelingRight && transform.position.x < offscreenX) ||
             (!playerTravelingRight && transform.position.x > offscreenX));
     }
 
@@ -218,7 +312,7 @@ public class Enemy : MonoBehaviour
 
         m_DisplayRoot.transform.localScale = new Vector3(TravelDir, 1f, 1f);
 
-        if(CurrState == State.Patrol)
+        if (CurrState == State.Patrol)
         {
             bool playerTravelingRight = m_Player.TravelDir == 1;
             Vector3 vel = Vector3.zero;
@@ -236,12 +330,12 @@ public class Enemy : MonoBehaviour
             }
         }
 
-        if(CurrState == State.GettingHijacked)
+        if (CurrState == State.GettingHijacked)
         {
             m_IsOpeningTick = Mathf.Min(m_IsOpeningTick + Time.deltaTime * m_IsOpeningTimeScale, m_IsOpeningTotalTime);
             m_HijackedMeterUI.SetFillPercent(m_IsOpeningTick / m_IsOpeningTotalTime);
 
-            if(m_IsOpeningTick >= m_IsOpeningTotalTime)
+            if (m_IsOpeningTick >= m_IsOpeningTotalTime)
             {
                 //This is where the player has finished hijacking and is now controlling this enemy
 
@@ -261,29 +355,35 @@ public class Enemy : MonoBehaviour
                 m_AnchorShipToScreenEdgeTween = transform.DOMoveX(-unitsWidth * .5f + kScreenHEdgeMargin, 1f);
                 m_IsMovingForward = false;
 
+                if(m_Mechbots != null)
+                {
+                    foreach (EnemyMechbot bot in m_Mechbots)
+                        bot.CurrentState = EnemyMechbot.State.Destroyed;
+                }
+
                 OnSuccessfullyHijacked?.Invoke();
             }
         }
 
-        if(CurrState == State.PlayerControlled && 
+        if (CurrState == State.PlayerControlled &&
            m_AnchorShipToScreenEdgeTween != null)
         {
-            if(Input.GetKey(KeyCode.LeftCommand))
+            if (Input.GetKey(KeyCode.LeftCommand))
             {
-                if(!m_IsMovingForward)
+                if (!m_IsMovingForward)
                 {
                     m_IsMovingForward = true;
 
                     if (m_FlightTween != null)
                         m_FlightTween.Kill();
-                    
-                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 
-                                               0, 
-                                               SideviewPlayer.kFlightMaxScrollSpeed, 
+
+                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x),
+                                               0,
+                                               SideviewPlayer.kFlightMaxScrollSpeed,
                                                2f);
                 }
             }
-            else if(Input.GetKeyUp(KeyCode.LeftCommand))
+            else if (Input.GetKeyUp(KeyCode.LeftCommand))
             {
                 if (m_IsMovingForward)
                 {
@@ -291,22 +391,22 @@ public class Enemy : MonoBehaviour
 
                     if (m_FlightTween != null)
                         m_FlightTween.Kill();
-                    
-                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 
-                                               m_BackgroundScroller.GetScrollSpeed(), 
-                                               0f, 
+
+                    m_FlightTween = DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x),
+                                               m_BackgroundScroller.GetScrollSpeed(),
+                                               0f,
                                                2f);
                 }
             }
 
-            Vector3 vel = new Vector3(0f, 5f, 0f) * Time.deltaTime; 
-            if(Input.GetKey(KeyCode.UpArrow))
+            Vector3 vel = new Vector3(0f, 5f, 0f) * Time.deltaTime;
+            if (Input.GetKey(KeyCode.UpArrow))
                 transform.position = GetClampedToScreenAreaPos(transform.position + vel);
-            if(Input.GetKey(KeyCode.DownArrow))
+            if (Input.GetKey(KeyCode.DownArrow))
                 transform.position = GetClampedToScreenAreaPos(transform.position - vel);
         }
 
-        if(m_DidCrash)
+        if (m_DidCrash)
         {
             Vector2 nextPos = transform.position + (Vector3)m_CrashedVel * Time.deltaTime;
             float velDot = Vector2.Dot(m_CrashedDir, (nextPos - (Vector2)transform.position).normalized);
@@ -315,12 +415,12 @@ public class Enemy : MonoBehaviour
                                                  nextPos.x < m_ScreenMoveMin.x ||
                                                  nextPos.y > m_ScreenMoveMax.y ||
                                                  nextPos.y < m_ScreenMoveMin.y;
-            
+
             bool clampPosToScreenArea = CurrState != State.Patrol && nextPosWillBeOutsideScreenArea;
 
             if (velDot > 0f)
             {
-                transform.position = nextPos;
+                transform.position = new Vector3(nextPos.x, nextPos.y, transform.position.z);
                 m_CrashedVel -= m_CrashedAccel * Time.deltaTime;
 
                 if (clampPosToScreenArea)
@@ -362,7 +462,7 @@ public class Enemy : MonoBehaviour
 
         Enemy otherEnemy = otherCollider.GetComponent<Enemy>();
 
-        if(m_CrashPunchScaleTween == null)
+        if (m_CrashPunchScaleTween == null)
         {
             m_CrashPunchScaleTween = transform.DOPunchScale(new Vector3(.4f, .4f, 1f), .3f, 20);
             m_CrashPunchScaleTween.onComplete = () => m_CrashPunchScaleTween = null;
@@ -397,4 +497,19 @@ public class Enemy : MonoBehaviour
         m_CrashedVel = m_CrashedDir * 20f;
         m_CrashedAccel = m_CrashedVel * 4f;
     }
+
+    #region IMarkerTrackedEntity
+
+    public Vector3 GetPosition()
+    {
+        return transform.position;
+    }
+
+    public int GetTrackingDir()
+    {
+        return -TravelDir;
+    }
+
+
+    #endregion
 }

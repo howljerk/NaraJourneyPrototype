@@ -22,6 +22,7 @@ public class DistanceIntervalEnemySpawner : MonoBehaviour
     [SerializeField] private float m_DistanceUnitsInterval;
     [SerializeField] private HorizontalScroller m_BackgroundScroller;
     [SerializeField] private GameObject m_EnemyPrefab;
+    [SerializeField] private GameObject m_EnemyTier2Prefab;
     [SerializeField] private SideviewPlayer m_Player;
     [SerializeField] private WorldGrid m_WorldGrid;
     [SerializeField] private GameObject m_SpawnPointerPrefab;
@@ -30,9 +31,11 @@ public class DistanceIntervalEnemySpawner : MonoBehaviour
 
     private int m_CurrentSpawnCount = 0;
     private float m_NextTimeToSpawn = 0f;
+
     private void Awake()
     {
-        m_NextTimeToSpawn = Time.realtimeSinceStartup + Random.Range(10f, 20f);
+        //Temporary way to make sure first spawn is quick for testing
+        m_NextTimeToSpawn = Time.realtimeSinceStartup + 1f;
     }
 
     private void Update()
@@ -48,7 +51,7 @@ public class DistanceIntervalEnemySpawner : MonoBehaviour
 
         if(Time.realtimeSinceStartup >= m_NextTimeToSpawn)
         {
-            m_NextTimeToSpawn = Time.realtimeSinceStartup + Random.Range(10f, 20f);
+            m_NextTimeToSpawn = Time.realtimeSinceStartup + Random.Range(10f, 20f);    
             SpawnEnemy();
         }
     }
@@ -62,18 +65,34 @@ public class DistanceIntervalEnemySpawner : MonoBehaviour
         float spawnX = (unitsWidth * .5f + Random.Range(10f, 15f)) * m_Player.TravelDir;
         float spawnY = Random.Range(unitsHeight * .5f - 2f, -unitsHeight * .5f + 2f);
 
-        GameObject enemyObj = Instantiate(m_EnemyPrefab, m_WorldRoot);
+        Enemy.DifficultTier spawnedTier = Random.Range(0f, 1f) > .5f ? Enemy.DifficultTier.Tier1 : Enemy.DifficultTier.Tier2;
+        //temp
+        spawnedTier = Enemy.DifficultTier.Tier2;
+        GameObject enemyObj = null;
+
+        switch(spawnedTier)
+        {
+            case Enemy.DifficultTier.Tier1:
+                enemyObj = Instantiate(m_EnemyPrefab, m_WorldRoot);
+                break;
+            case Enemy.DifficultTier.Tier2:
+                enemyObj = Instantiate(m_EnemyTier2Prefab, m_WorldRoot);
+                break;
+        }
+
         enemyObj.transform.position = new Vector3(spawnX, spawnY, -2f);
 
         Enemy e = enemyObj.GetComponent<Enemy>();
         e.SetPlayer(m_Player);
         e.SetScreenRoot(m_ScreenRoot);
+        e.SetWorldRoot(m_WorldRoot);
         e.SetScroller(m_BackgroundScroller);
         e.uiRoot = m_UIRoot;
+        e.Tier = spawnedTier;
         e.CreateSpawnMarker();
 
-        if (m_Player.TravelDir == -1)
-            e.TravelDir = -1;
+        //if (m_Player.TravelDir == -1)
+            //e.TravelDir = -1;
 
         s_CurrentEnemies.Add(e);
     }
