@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using DG.Tweening;
+using System.Collections.Generic;
 
 public class PlayerSpear : MonoBehaviour
 {
@@ -7,8 +8,8 @@ public class PlayerSpear : MonoBehaviour
     [SerializeField] private Sprite m_SpearTipSprite;
     [SerializeField] private GameObject m_RopeNode;
 
-    private SpriteRenderer m_Rope;
     private SpriteRenderer m_SpearTip;
+    private List<SpriteRenderer> m_Ropes = new List<SpriteRenderer>();
 
     private Vector2 m_ScreenMoveMin = Vector2.zero;
     private Vector2 m_ScreenMoveMax = Vector2.zero;
@@ -32,9 +33,9 @@ public class PlayerSpear : MonoBehaviour
 
     public void Clear()
     {
-        if (m_Rope != null)
-            Destroy(m_Rope.gameObject);
-        m_Rope = null;
+        foreach (SpriteRenderer r in m_Ropes)
+            Destroy(r.gameObject);
+        m_Ropes.Clear();
 
         if (m_SpearTip != null)
             Destroy(m_SpearTip.gameObject);
@@ -49,42 +50,59 @@ public class PlayerSpear : MonoBehaviour
         Vector3 endPos = GetClampedToScreenAreaPos(transform.position + (Vector3)(dir * fireDist));
         dir = (endPos - transform.position).normalized;
 
-        GameObject rope = new GameObject("rope");
-        rope.transform.SetParent(m_RopeNode.transform);
-
-        Vector3 right = dir;
-        Vector3 forward = new Vector3(0f, 0f, -1f);
-        Vector3 up = Vector3.Cross(right, forward);
-
-        rope.transform.right = right;
-        rope.transform.forward = forward;
-        rope.transform.up = up;
-
-        m_Rope = rope.AddComponent<SpriteRenderer>();
-        m_Rope.sprite = m_RopeSprite;
-
-        Vector3 ropePos = (startPos + endPos) * .5f;
-        m_RopeNode.transform.position = startPos;
-
-        rope.transform.position = new Vector3(ropePos.x, ropePos.y, transform.position.z);
-
+        Vector3 screenStartPos = Camera.main.WorldToScreenPoint(startPos);
+        Vector3 screenEndPos = Camera.main.WorldToScreenPoint(endPos);
+        Vector2 lookAt = (screenEndPos - screenStartPos).normalized;
+        float angle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
         float dist = (endPos - transform.position).magnitude;
-        Vector3 ropeScale = rope.transform.localScale;
-        rope.transform.localScale = new Vector3(dist, .1f, ropeScale.z);
+        float pos = 0f;
+        float segmentScale = 1f;
+        float segmentWidthPlusHalf = 1.5f * segmentScale;
+        float segmentWidth = 1.0f * segmentScale;
+
+        int idx = 0;
+        for (float d = 0f; !Mathf.Approximately(d, dist);)
+        {
+            float totalDistDiff = dist - d;
+            float xScale = 1f * segmentScale;
+
+            if (totalDistDiff >= segmentWidthPlusHalf)
+            {
+                pos += segmentWidth;
+                d += segmentWidth;
+            }
+            else
+            {
+                xScale = (totalDistDiff - segmentWidth * .5f) / segmentWidth;
+                pos += segmentWidth * .5f + (totalDistDiff - segmentWidth * .5f) * .5f;
+                d += totalDistDiff;
+            }
+
+            Vector3 ropePos = startPos + (Vector3)dir * pos;
+
+            GameObject rope = new GameObject("rope");
+            rope.transform.SetParent(transform);
+            rope.transform.position = ropePos;
+            rope.transform.rotation = Quaternion.Euler(new Vector3(0f, 0f, angle));
+            rope.transform.localScale = new Vector3(xScale, .1f, 1f);
+
+            Sequence appearSeq = DOTween.Sequence();
+            appearSeq.AppendInterval(idx++ * .05f);
+            appearSeq.AppendCallback(() =>
+            {
+                SpriteRenderer ropeSprite = rope.AddComponent<SpriteRenderer>();
+                ropeSprite.sprite = m_RopeSprite;
+                m_Ropes.Add(ropeSprite);
+            });
+        }
 
         GameObject spearTip = new GameObject("spear_tip");
-        spearTip.transform.SetParent(m_RopeNode.transform);
+        spearTip.transform.SetParent(transform);
         spearTip.transform.position = new Vector3(endPos.x, endPos.y, endPos.z - 1f);
         spearTip.transform.localScale = new Vector3(.2f, .2f, 1f);
 
         m_SpearTip = spearTip.AddComponent<SpriteRenderer>();
         m_SpearTip.sprite = m_SpearTipSprite;
-
-        float ropeExpandUnitsPerSec = 10f;
-        float expandTime = (endPos - transform.position).magnitude / ropeExpandUnitsPerSec;
-
-        m_RopeNode.transform.localScale = new Vector3(0f, 0f, 1f);
-        m_RopeNode.transform.DOScale(Vector3.one, expandTime).SetEase(Ease.InSine);
     }
 
     private Vector3 GetClampedToScreenAreaPos(Vector3 pos)
