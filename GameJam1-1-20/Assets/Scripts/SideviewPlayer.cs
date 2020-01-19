@@ -31,6 +31,10 @@ public class SideviewPlayer : MonoBehaviour
     [SerializeField] private Transform m_ScreenRoot;
     [SerializeField] private BoxCollider2D m_BoxCollider;
     [SerializeField] private BackgroundTap m_BackgroundTap;
+    //Temporarily bypass projectiles while working on hatch state movements
+    [SerializeField] private bool m_TempDebugGetHitByProjectiles = false;
+    [SerializeField] private HijackButton m_HijackButton;
+    [SerializeField] private GameObject m_PlayerSpearPrefab;
 
     //Idle state vars
     private float m_IdleScrollSpeed = 0f;
@@ -63,6 +67,9 @@ public class SideviewPlayer : MonoBehaviour
 
     //On Hatch state vars
     private bool m_IsOpening = false;
+    private bool m_PressedDownOnHatch = false;
+    private Vector2 m_PressedPos = Vector2.zero;
+    private Vector2 m_ReleasePos = Vector2.zero;
 
     //Controlling enemy state vars
     private List<Enemy> m_OwnedEnemies;
@@ -80,6 +87,8 @@ public class SideviewPlayer : MonoBehaviour
 
     private Vector2 m_DistTraveledFromStart = Vector2.zero;
     public Vector2 DistTraveledFromStart { get { return m_DistTraveledFromStart; } }
+
+    private PlayerSpear m_PlayerSpear;
 
     private void Awake()
     {
@@ -99,6 +108,10 @@ public class SideviewPlayer : MonoBehaviour
 
         m_JumpBoostLeftArrow.gameObject.SetActive(false);
         m_JumpBoostRightArrow.gameObject.SetActive(false);
+
+        GameObject spearObj = Instantiate(m_PlayerSpearPrefab);
+        m_PlayerSpear = spearObj.GetComponent<PlayerSpear>();
+        m_PlayerSpear.transform.SetParent(transform);
 
         Enemy.OnSuccessfullyHijacked += OnSuccessfullyHijackedEnemy;
         GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
@@ -155,7 +168,7 @@ public class SideviewPlayer : MonoBehaviour
                 m_PressedForBoost = true;
                 m_PressedForBoostStartTime = currentTime;
             }
-            if(currentTime - m_PressedForBoostStartTime > .2f)
+            if(currentTime - m_PressedForBoostStartTime > .3f)
             {
                 nextState = State.JumpBoost;
                 ResetStateVars(nextState);
@@ -174,10 +187,11 @@ public class SideviewPlayer : MonoBehaviour
 
                 float timeToMaxBoost = 1f;
                 float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
-                float maxBoostAdditiveArrowScale = 3f;
-                m_JumpBoostRightArrow.localScale = new Vector3(1f + timeInJumpBoost / timeToMaxBoost * maxBoostAdditiveArrowScale,
-                                                               1f,
-                                                               1f);
+                float maxBoostAdditiveArrowScale = 7f;
+                //m_JumpBoostRightArrow.localScale = new Vector3(1f + timeInJumpBoost / timeToMaxBoost * maxBoostAdditiveArrowScale,
+                //1f,
+                //1f);
+                m_JumpBoostRightArrow.localScale = new Vector3(maxBoostAdditiveArrowScale, 4f, 1f);
 
                 m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (lookAt.x < 0f ? -1f : 1f),
                                                        m_DisplayRoot.localScale.y,
@@ -200,12 +214,15 @@ public class SideviewPlayer : MonoBehaviour
                     m_StartedBoostPath = true;
                     m_JumpBoostRightArrow.gameObject.SetActive(false);
 
-                    float timeToMaxBoost = .5f;
-                    float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
+                    m_PlayerSpear.Clear();
+                    m_PlayerSpear.FireIntoDirection(transform.position, m_JumpBoostRightArrow.right);
 
-                    m_BoostDir = m_JumpBoostRightArrow.right;
-                    m_BoostAcceleration = m_BoostDir * (timeInJumpBoost / timeToMaxBoost) * (m_ScreenUnitsWidth * 1.25f);
-                    m_BoostVelocity = m_BoostAcceleration;
+                    //float timeToMaxBoost = .5f;
+                    //float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
+
+                    //m_BoostDir = m_JumpBoostRightArrow.right;
+                    //m_BoostAcceleration = m_BoostDir * (timeInJumpBoost / timeToMaxBoost) * (m_ScreenUnitsWidth * 1.25f);
+                    //m_BoostVelocity = m_BoostAcceleration;
                 }
             }
             else if (nextState == State.None)
@@ -218,8 +235,9 @@ public class SideviewPlayer : MonoBehaviour
 
         if(m_PlayerState == State.OnHatch)
         {
-            //Maybe should be detecting hold down on UI button
-            if(bgInputDown)
+            bool hijackBtnPressed = m_HijackButton.IsHeldDown;
+
+            if(hijackBtnPressed)
             {
                 if(!m_IsOpening)
                 {
@@ -228,15 +246,18 @@ public class SideviewPlayer : MonoBehaviour
                     OnStartedOpeningInHijack?.Invoke();
                 }
             }
-            else if(bgInputUp)
+            else if (m_IsOpening)
             {
-                if(m_IsOpening)
-                {
-                    m_IsOpening = false;
-                    m_Animations.Play("Idle");
-                    OnStoppedOpeningInHijack?.Invoke();
-                }
+                m_IsOpening = false;
+                m_Animations.Play("Idle");
+                OnStoppedOpeningInHijack?.Invoke();
             }
+
+            //Detect swipes here to do the anchored pull in/out movements while attached to
+            //the hatch
+    //        private Vector2 m_PressedPos = Vector2.zero;
+    //private Vector2 m_ReleasePos = Vector2.zero;
+
         }
 
         //Detect to go into idle state
@@ -312,11 +333,13 @@ public class SideviewPlayer : MonoBehaviour
         m_GoToTravelTime = gotoLength.magnitude / kGoToUnitsPerSec;
         m_GoToTravelDir = gotoLength.normalized;
 
-        m_DisplayRoot.localScale = new Vector3(m_GoToTravelDir.x > 0 ? 1 : -1,
+        m_DisplayRoot.localScale = new Vector3(m_DisplayRoot.localScale.x * (m_GoToTravelDir.x > 0 ? 1 : -1),
                                                m_DisplayRoot.localScale.y,
                                                m_DisplayRoot.localScale.z);
 
-        m_GoToPointer.transform.position = m_GoToDestPos;
+        m_GoToPointer.transform.position = new Vector3(m_GoToDestPos.x, 
+                                                       m_GoToDestPos.y, 
+                                                       m_GoToPointer.transform.position.z);
         m_GoToPointer.SetActive(true);
 
         if (m_GoToTween != null)
@@ -331,6 +354,8 @@ public class SideviewPlayer : MonoBehaviour
 
         m_Animations.Play("Idle");
         m_PlayerState = State.GoTo;
+
+        m_PlayerSpear.Clear();
     }
 
     private void UpdateGoToPos(float t)
@@ -363,7 +388,7 @@ public class SideviewPlayer : MonoBehaviour
         //Vector2 originDestPos = new Vector2(m_ScreenMoveMin.x, transform.position.y);
         //m_FlightOriginTravelDir = (originDestPos - (Vector2)transform.localPosition).normalized;
 
-        m_JumpBoostRightArrow.localScale = Vector3.one;
+        m_JumpBoostRightArrow.localScale = new Vector3(4f, 4f, 1f);
         m_PlayerState = State.Flight;
         DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), 0, kFlightMaxScrollSpeed, 2f);
     }
@@ -444,16 +469,17 @@ public class SideviewPlayer : MonoBehaviour
     {
         m_Animations.Play("Idle");
         m_PlayerState = State.OnHatch;
-        //m_BackgroundScroller.SetScrollSpeed(-Enemy.kEnemySpeed);
         m_BackgroundScroller.SetScrollSpeed(0f);
         m_IsOpening = false;
+        m_HijackButton.gameObject.SetActive(true);
     }
 
     private void OnSuccessfullyHijackedEnemy()
     {
         m_Animations.Play("InEnemy");
+
+        ResetStateVars(State.ControllingEnemy);
         m_PlayerState = State.ControllingEnemy;
-        //m_BackgroundScroller.SetScrollSpeed(0f);
 
         m_CurrentControlledEnemy = m_CurrentAttachedEnemy;
         m_CurrentAttachedEnemy = null;
@@ -503,6 +529,10 @@ public class SideviewPlayer : MonoBehaviour
             case State.Flight:
                 DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), kFlightMaxScrollSpeed, 0, 2f);
                 break;
+            case State.OnHatch:
+                m_IsOpening = false;
+                m_HijackButton.gameObject.SetActive(false);
+                break;
         }
     }
 
@@ -538,10 +568,27 @@ public class SideviewPlayer : MonoBehaviour
 
             m_CurrentAttachedEnemy = enemy;
 
-
             ResetStateVars(State.OnHatch);
             if(m_PlayerState != State.OnHatch)
                 InitOnHatchState();
+        }
+        else if(otherCollider.tag == "Projectile" &&
+                m_PlayerState != State.Damaged &&
+                m_TempDebugGetHitByProjectiles)
+        {
+            transform.SetParent(m_ScreenRoot.transform);
+            transform.localScale = m_InitScale;
+
+            ResetStateVars(State.Damaged);
+            m_DamagedDir = (transform.position - otherCollider.gameObject.transform.position).normalized;
+            m_DamagedAcceleration = m_DamagedVelocity = m_DamagedDir * 5f;
+            InitDamagedState();
+
+            //Destroy projectile that hits player
+            Destroy(otherCollider.gameObject);
+
+            m_CurrentAttachedEnemy.SetState(Enemy.State.Patrol);
+            m_CurrentAttachedEnemy = null;
         }
     }
 

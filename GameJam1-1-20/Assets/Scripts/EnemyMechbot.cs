@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using DG.Tweening;
+﻿using DG.Tweening;
 using UnityEngine;
 
 public class EnemyMechbot : MonoBehaviour
@@ -16,6 +14,7 @@ public class EnemyMechbot : MonoBehaviour
     public Enemy LinkedEnemy { get; set; }
     public Transform WorldRoot { get; set; }
     public int ClaimedGridIndex { get; set; } = -1;
+    public SideviewPlayer Player { get; set; }
 
     private State m_CurrentState = State.Idle;
     public State CurrentState
@@ -32,6 +31,13 @@ public class EnemyMechbot : MonoBehaviour
 
     [SerializeField] private GameObject m_GridAnchorDebug;
     [SerializeField] private bool m_EnableGridAnchorDebug = false;
+    [SerializeField] private Animator m_AnimationState;
+    [SerializeField] private GameObject m_ShooterBeamPrefab;
+
+    //Destroy target state vars
+    private const float kBeamShootMinTime = 2f;
+    private const float kBeamShootMaxTime = 4f;
+    private float m_TimeSinceBeamShoot;
 
     private void Awake()
     {
@@ -40,6 +46,18 @@ public class EnemyMechbot : MonoBehaviour
     private void Start()
     {
         CurrentState = State.GotoAnchor;
+    }
+
+    private void Update()
+    {
+        if(m_CurrentState == State.DestroyTarget)
+        {
+            if(Time.realtimeSinceStartup > m_TimeSinceBeamShoot)
+            {
+                ShootBeamAtPlayer();
+                m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
+            }
+        }
     }
 
     private void ResetState(State state)
@@ -55,6 +73,7 @@ public class EnemyMechbot : MonoBehaviour
                 InitGotoAnchor();
                 break;
             case State.DestroyTarget:
+                InitDestroyTarget();
                 break;
             case State.Destroyed:
                 InitDestroy();
@@ -90,7 +109,9 @@ public class EnemyMechbot : MonoBehaviour
         Vector3 ls = transform.localScale;
         transform.localScale = new Vector3(ls.x * (moveDir.x < 0f ? -1 : 1), ls.y, ls.z);
 
-        transform.position = WorldRoot.InverseTransformPoint(LinkedEnemy.transform.position);
+        transform.position = new Vector3(LinkedEnemy.transform.position.x, 
+                                         LinkedEnemy.transform.position.y, 
+                                         transform.position.z);
 
         SpriteRenderer[] sprites = GetComponentsInChildren<SpriteRenderer>(true);
         foreach (SpriteRenderer s in sprites)
@@ -101,7 +122,7 @@ public class EnemyMechbot : MonoBehaviour
 
         float unitsPerSec = 7f;
         float moveTime = anchorDist / unitsPerSec;
-        transform.DOMove(WorldRoot.InverseTransformPoint(anchor.center), moveTime).onComplete = () =>
+        transform.DOMove(new Vector3(anchor.center.x, anchor.center.y, transform.position.z), moveTime).onComplete = () =>
         {
             //When done moving, face back towards the enemy ship
             transform.localScale = new Vector3(-transform.localScale.x,
@@ -116,10 +137,25 @@ public class EnemyMechbot : MonoBehaviour
 
     #region Destroy Target state
 
-    //TODO: Do shooting at player
     private void InitDestroyTarget()
     {
         m_CurrentState = State.DestroyTarget;
+        ShootBeamAtPlayer();
+        m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
+    }
+
+    private void ShootBeamAtPlayer()
+    {
+        GameObject shooterBeamObj = Instantiate(m_ShooterBeamPrefab, WorldRoot);
+        shooterBeamObj.transform.position = transform.position;
+
+        Vector3 right = (Player.transform.position - transform.position).normalized;
+        Vector3 forward = new Vector3(0f, 0f, -1f);
+        Vector3 up = Vector3.Cross(right, forward);
+
+        shooterBeamObj.transform.right = right;
+        shooterBeamObj.transform.forward = forward;
+        shooterBeamObj.transform.up = up;
     }
 
     #endregion
@@ -128,8 +164,12 @@ public class EnemyMechbot : MonoBehaviour
 
     private void InitDestroy()
     {
-        //TODO: Do explosion anim
-        Destroy(gameObject);
+        m_AnimationState.Play("EnemyMechbot_Explode");
+    }
+
+    public void OnExplosionAnimFinished()
+    {
+        Destroy(gameObject);        
     }
 
     #endregion

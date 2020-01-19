@@ -179,6 +179,12 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
                     m_IsMovingForward = false;
                 }
                 break;
+            case State.GettingHijacked:
+                {
+                    Destroy(m_HijackedMeterUI.gameObject);
+                    m_HijackedMeterUI = null;
+                }
+                break;
         }
     }
 
@@ -262,6 +268,7 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
         GameObject mechbotObj = Instantiate(m_EnemyMechbotPrefab);
         EnemyMechbot mechbot = mechbotObj.GetComponent<EnemyMechbot>();
         mechbot.LinkedEnemy = this;
+        mechbot.Player = m_Player;
         mechbot.WorldRoot = m_WorldRoot;
         mechbot.ClaimedGridIndex = gridIndexToClaim;
 
