@@ -111,7 +111,7 @@ public class SideviewPlayer : MonoBehaviour
 
         GameObject spearObj = Instantiate(m_PlayerSpearPrefab);
         m_PlayerSpear = spearObj.GetComponent<PlayerSpear>();
-        m_PlayerSpear.transform.SetParent(transform);
+        m_PlayerSpear.transform.SetParent(transform, false);
 
         Enemy.OnSuccessfullyHijacked += OnSuccessfullyHijackedEnemy;
         GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
@@ -158,44 +158,50 @@ public class SideviewPlayer : MonoBehaviour
 
         //Detect to go into jump boost state
         if (bgInputDown && 
-            !m_StartedBoostPath && 
             m_PlayerState != State.Damaged && 
             m_PlayerState != State.OnHatch)
         {
-            float currentTime = Time.realtimeSinceStartup;
-            if(!m_PressedForBoost)
+            if(m_StartedBoostPath && m_PlayerSpear.CanClamp)
             {
-                m_PressedForBoost = true;
-                m_PressedForBoostStartTime = currentTime;
+                HandleClampedToObjectByRope();
             }
-            if(currentTime - m_PressedForBoostStartTime > .3f)
+            else
             {
-                nextState = State.JumpBoost;
-                ResetStateVars(nextState);
+                float currentTime = Time.realtimeSinceStartup;
+                if (!m_PressedForBoost)
+                {
+                    m_PressedForBoost = true;
+                    m_PressedForBoostStartTime = currentTime;
+                }
+                if (currentTime - m_PressedForBoostStartTime > .3f)
+                {
+                    nextState = State.JumpBoost;
+                    ResetStateVars(nextState);
 
-                if (m_PlayerState != nextState)
-                    InitJumpBoostState();
+                    if (m_PlayerState != nextState)
+                        InitJumpBoostState();
 
-                Vector2 playerScreenPos = Camera.main.WorldToScreenPoint(transform.position);
-                Vector2 arrowDirPos = Input.mousePosition;
-                Vector2 lookAt = (arrowDirPos - playerScreenPos).normalized;
+                    Vector2 playerScreenPos = Camera.main.WorldToScreenPoint(transform.position);
+                    Vector2 arrowDirPos = Input.mousePosition;
+                    Vector2 lookAt = (arrowDirPos - playerScreenPos).normalized;
 
-                float jumpBoostAngle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
+                    float jumpBoostAngle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
 
-                m_JumpBoostRightArrow.rotation = Quaternion.Euler(new Vector3(0f, 0f, jumpBoostAngle));
-                m_JumpBoostRightArrow.localPosition = m_JumpBoostRightArrow.transform.right * .3f;
+                    m_JumpBoostRightArrow.rotation = Quaternion.Euler(new Vector3(0f, 0f, jumpBoostAngle));
+                    m_JumpBoostRightArrow.localPosition = m_JumpBoostRightArrow.transform.right * .3f;
 
-                float timeToMaxBoost = 1f;
-                float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
-                float maxBoostAdditiveArrowScale = 7f;
-                //m_JumpBoostRightArrow.localScale = new Vector3(1f + timeInJumpBoost / timeToMaxBoost * maxBoostAdditiveArrowScale,
-                //1f,
-                //1f);
-                m_JumpBoostRightArrow.localScale = new Vector3(maxBoostAdditiveArrowScale, 4f, 1f);
+                    float timeToMaxBoost = 1f;
+                    float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
+                    float maxBoostAdditiveArrowScale = 7f;
+                    //m_JumpBoostRightArrow.localScale = new Vector3(1f + timeInJumpBoost / timeToMaxBoost * maxBoostAdditiveArrowScale,
+                    //1f,
+                    //1f);
+                    m_JumpBoostRightArrow.localScale = new Vector3(maxBoostAdditiveArrowScale, 4f, 1f);
 
-                m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (lookAt.x < 0f ? -1f : 1f),
-                                                       m_DisplayRoot.localScale.y,
-                                                       m_DisplayRoot.localScale.z);                
+                    m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (lookAt.x < 0f ? -1f : 1f),
+                                                           m_DisplayRoot.localScale.y,
+                                                           m_DisplayRoot.localScale.z);
+                }
             }
         }
 
@@ -215,7 +221,13 @@ public class SideviewPlayer : MonoBehaviour
                     m_JumpBoostRightArrow.gameObject.SetActive(false);
 
                     m_PlayerSpear.Clear();
-                    m_PlayerSpear.FireIntoDirection(transform.position, m_JumpBoostRightArrow.right);
+                    m_PlayerSpear.FireIntoDirection(transform.position, 
+                                                    m_JumpBoostRightArrow.right, 
+                                                    () => 
+                    {
+                        ResetStateVars(State.Idle);
+                        InitIdleState();
+                    });
 
                     //float timeToMaxBoost = .5f;
                     //float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
@@ -274,8 +286,8 @@ public class SideviewPlayer : MonoBehaviour
                 InitIdleState();
         }
 
-        if(m_StartedBoostPath && m_PlayerState == State.JumpBoost)
-            HandleBoostVelocity(ref moveVecThisFrame);
+        //if(m_StartedBoostPath && m_PlayerState == State.JumpBoost)
+            //HandleBoostVelocity(ref moveVecThisFrame);
 
         if (m_PlayerState == State.Damaged)
             HandleDamagedVelocity(ref moveVecThisFrame);
@@ -428,6 +440,43 @@ public class SideviewPlayer : MonoBehaviour
         }
     }
 
+    private void HandleClampedToObjectByRope()
+    {
+        if (m_PlayerSpear.CurrentState != PlayerSpear.State.Extending)
+            return;
+        
+        m_PlayerSpear.CancelRopeMovement();
+        m_PlayerSpear.ReelIn();
+
+        GameObject clampedObject = m_PlayerSpear.ClampedObject;
+
+        if(clampedObject.tag == "ShipHatch")
+        {
+            //Now that we're attached to enemy, keep it in screen space
+            Enemy enemy = clampedObject.GetComponentInParent<Enemy>();
+
+            if (m_OwnedEnemies.IndexOf(enemy) != -1)
+                return;
+
+            enemy.transform.SetParent(m_ScreenRoot);
+            enemy.SetState(Enemy.State.GettingHijacked);
+
+            //TODO: Tell rope to pull back in, in opposite fashion while
+            //player moves along with it.
+
+            ResetStateVars(State.OnHatch);
+            if (m_PlayerState != State.OnHatch)
+                InitOnHatchState();
+
+            //Set player to hatch coordinate space
+            //transform.SetParent(clampedObject.transform, false);
+            //transform.localPosition = new Vector3(0f, 0f, -1f);
+            //transform.localScale = new Vector3(1.5f, 1.5f, 1f);
+
+            m_CurrentAttachedEnemy = enemy;               
+        }        
+    }
+
     #endregion
 
     #region damaged state
@@ -491,6 +540,7 @@ public class SideviewPlayer : MonoBehaviour
     }
 
     #endregion
+
 
     private void HandleMoveStep(Vector2 moveStep)
     {

@@ -75,6 +75,7 @@
     <Compile Include="Assets\Scripts\IMarkerTrackedEntity.cs" />
     <Compile Include="Assets\Scripts\Player.cs" />
     <Compile Include="Assets\Scripts\PlayerSpear.cs" />
+    <Compile Include="Assets\Scripts\PlayerSpearTip.cs" />
     <Compile Include="Assets\Scripts\ShooterBeam.cs" />
     <Compile Include="Assets\Scripts\SideviewPlayer.cs" />
     <Compile Include="Assets\Scripts\SpawnMarker.cs" />
