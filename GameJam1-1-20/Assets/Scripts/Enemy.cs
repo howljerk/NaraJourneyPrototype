@@ -141,6 +141,12 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
         SideviewPlayer.OnStoppedOpeningInHijack += OnPlayerStoppedOpening;
     }
 
+    private void OnDestroy()
+    {
+        SideviewPlayer.OnStartedOpeningInHijack -= OnPlayerStartedOpening;
+        SideviewPlayer.OnStoppedOpeningInHijack -= OnPlayerStoppedOpening;
+    }
+
     public void CreateSpawnMarker()
     {
         float unitsHeight = Camera.main.orthographicSize * 2f;
@@ -277,11 +283,15 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
 
     private void OnPlayerStartedOpening()
     {
+        if (CurrState != State.GettingHijacked)
+            return;
         m_IsOpeningTimeScale = 1f;
     }
 
     private void OnPlayerStoppedOpening()
     {
+        if (CurrState != State.GettingHijacked)
+            return;
         m_IsOpeningTimeScale = 0f;
     }
 

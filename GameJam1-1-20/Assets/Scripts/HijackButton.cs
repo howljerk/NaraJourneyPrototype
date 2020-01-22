@@ -5,6 +5,18 @@ public class HijackButton : Button
 {
     public bool IsHeldDown { get; private set; }
 
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        IsHeldDown = false;
+    }
+
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+        IsHeldDown = false;
+    }
+
     public override void OnPointerDown(PointerEventData eventData)
     {
         base.OnPointerDown(eventData);

@@ -9,7 +9,9 @@ public class PlayerSpear : MonoBehaviour
         Idle,
         Extending,
         Pullback,
-        ReelingIn
+        ReelingIn,
+        ClosedToClamp,
+        SwingingOutFromClamp
     }
 
     [SerializeField] private Sprite m_RopeSprite;
@@ -19,13 +21,15 @@ public class PlayerSpear : MonoBehaviour
     [SerializeField] private GameObject m_RopeShowMask;
 
     private const float kFireDist = 10f;
-    private const float kFireUnitsPerSec = 15f;
+    private const float kFireUnitsPerSec = 12f;
 
     private State m_State = State.Idle;
     public State CurrentState { get { return m_State; } }
 
     private bool m_CanClamp = false;
     public bool CanClamp { get { return m_CanClamp; } }
+
+    public SideviewPlayer Player { get; set; }
 
     public GameObject ClampedObject { get; private set; }
 
@@ -37,10 +41,12 @@ public class PlayerSpear : MonoBehaviour
     private Tweener m_RopeMaskScaleTween;
     private Tweener m_RopeMaskMoveTween;
     private Tweener m_SpearMoveTween;
+    private Tweener m_PlayerReelInMoveTween;
     private Vector3 m_CurrentStartPos;
     private Vector3 m_CurrentEndPos;
     private float m_CurrentDist;
     private System.Action m_PulledBackInCallback;
+    private System.Action m_ReeledInCallback;
 
     private void Awake()
     {
@@ -53,7 +59,6 @@ public class PlayerSpear : MonoBehaviour
 
         m_SpearTip.OnCanClamp += OnSpearCanClamp;
         m_SpearTip.OnCantClamp += OnSpearCantClamp;
-
     }
 
     private void Update()
@@ -87,11 +92,6 @@ public class PlayerSpear : MonoBehaviour
 
         foreach (SpriteRenderer r in m_RopeSegments)
             r.color = Color.white;
-    }
-
-    public void ReelIn()
-    {
-        m_State = State.ReelingIn;
     }
 
     public void FireIntoDirection(Vector3 startPos, Vector2 dir, System.Action pulledBackInCallback)
@@ -176,6 +176,51 @@ public class PlayerSpear : MonoBehaviour
         m_State = State.Extending;
     }
 
+    public void ReelIn(System.Action reeledInCallback)
+    {
+        m_State = State.ReelingIn;
+
+        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
+
+        m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
+        m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(Vector3.zero, tweenTime);
+
+        Vector3 spearToPlayerLocalPos = Player.transform.parent.InverseTransformPoint(m_SpearTip.transform.position);
+        m_PlayerReelInMoveTween = Player.transform.DOLocalMove(spearToPlayerLocalPos, tweenTime);
+
+        m_SpearMoveTween = m_SpearTip.transform.DOLocalMove(Vector3.zero, tweenTime);
+        m_SpearMoveTween.onComplete = OnRopeReeledIn;
+
+        m_ReeledInCallback = reeledInCallback;
+    }
+
+    //TODO: WIP
+    public void SwingAwayFromClamp(Vector3 startPos, Vector2 dir, float swingDistance)
+    {
+        m_State = State.SwingingOutFromClamp;
+        m_CurrentDist = swingDistance;
+
+        transform.position = new Vector3(startPos.x, startPos.y, transform.position.z);
+
+        Vector3 endPos = GetClampedToScreenAreaPos(transform.position + (Vector3)(dir * kFireDist));
+        dir = (endPos - transform.position).normalized;
+
+        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
+    }
+
+    /// <summary>
+    /// Callback for when spear has finished being reeled, which always follows
+    /// a successful clamp to an object.
+    /// </summary>
+    private void OnRopeReeledIn()
+    {
+        m_State = State.ClosedToClamp;
+        m_ReeledInCallback?.Invoke();
+    }
+
+    /// <summary>
+    /// Callback for when the spear has reached its full extension
+    /// </summary>
     private void OnRopeExtended()
     {
         if (m_State != State.Extending)
@@ -191,7 +236,9 @@ public class PlayerSpear : MonoBehaviour
         m_SpearMoveTween.onComplete = OnRopePulledIn;
     }
 
-
+    /// <summary>
+    /// Callback for the spear has finished being pulled back in
+    /// </summary>
     private void OnRopePulledIn()
     {
         m_PulledBackInCallback?.Invoke();

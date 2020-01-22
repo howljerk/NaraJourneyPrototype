@@ -76,6 +76,12 @@ public class SideviewPlayer : MonoBehaviour
     private Enemy m_CurrentAttachedEnemy;
     private Enemy m_CurrentControlledEnemy;
 
+    //Clamp swinging vars
+    private const float kMaxClampSwingTimeWindow = .2f; //This time check should enforce the "quick swipe" motion that's needed.
+    private bool m_InputDownForClampSwing;
+    private Vector2 m_ClampSwingScreenDownPos;
+    private float m_ClampSwingDownStartTime;
+
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
     private Vector2 m_ScreenMoveMin = Vector2.zero;
@@ -112,6 +118,7 @@ public class SideviewPlayer : MonoBehaviour
         GameObject spearObj = Instantiate(m_PlayerSpearPrefab);
         m_PlayerSpear = spearObj.GetComponent<PlayerSpear>();
         m_PlayerSpear.transform.SetParent(transform, false);
+        m_PlayerSpear.Player = this;
 
         Enemy.OnSuccessfullyHijacked += OnSuccessfullyHijackedEnemy;
         GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
@@ -265,11 +272,35 @@ public class SideviewPlayer : MonoBehaviour
                 OnStoppedOpeningInHijack?.Invoke();
             }
 
-            //Detect swipes here to do the anchored pull in/out movements while attached to
-            //the hatch
-    //        private Vector2 m_PressedPos = Vector2.zero;
-    //private Vector2 m_ReleasePos = Vector2.zero;
+            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp)
+            {
+                //Spear being in this state means we can swipe on the screen to clamp swing
 
+                if(bgInputDown && !m_InputDownForClampSwing)
+                {
+                    m_InputDownForClampSwing = true;
+                    m_ClampSwingScreenDownPos = Input.mousePosition;
+                    m_ClampSwingDownStartTime = Time.realtimeSinceStartup;
+                }
+                else if(bgInputUp && m_InputDownForClampSwing)
+                {
+                    m_InputDownForClampSwing = false;
+
+                    float clampSwipeTime = Time.realtimeSinceStartup - m_ClampSwingDownStartTime;
+                    if(clampSwipeTime <= kMaxClampSwingTimeWindow)
+                    {
+                        //We'll say that this was quick enough to be considered a swipe
+
+                        Vector3 worldSwipeStartPos = Camera.main.ScreenToWorldPoint(m_ClampSwingScreenDownPos);
+                        Vector3 worldSwipeEndPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                        //Get swipe direction and distance
+                        Vector2 swipeDir = (worldSwipeEndPos - worldSwipeStartPos).normalized;
+                        float swipeDist = swipeDir.magnitude;
+
+                        //We now use these data points to get the player spear to do its clamp swing behavior
+                    }
+                }
+            }
         }
 
         //Detect to go into idle state
@@ -446,35 +477,46 @@ public class SideviewPlayer : MonoBehaviour
             return;
         
         m_PlayerSpear.CancelRopeMovement();
-        m_PlayerSpear.ReelIn();
 
         GameObject clampedObject = m_PlayerSpear.ClampedObject;
+        State nextStateFromClamp = State.None;
 
         if(clampedObject.tag == "ShipHatch")
         {
-            //Now that we're attached to enemy, keep it in screen space
             Enemy enemy = clampedObject.GetComponentInParent<Enemy>();
-
             if (m_OwnedEnemies.IndexOf(enemy) != -1)
                 return;
 
+            //Now that we're attached to enemy, keep it in screen space
             enemy.transform.SetParent(m_ScreenRoot);
+            //Tell enemy it's getting fucked over hard
             enemy.SetState(Enemy.State.GettingHijacked);
 
-            //TODO: Tell rope to pull back in, in opposite fashion while
-            //player moves along with it.
-
-            ResetStateVars(State.OnHatch);
-            if (m_PlayerState != State.OnHatch)
-                InitOnHatchState();
-
-            //Set player to hatch coordinate space
-            //transform.SetParent(clampedObject.transform, false);
-            //transform.localPosition = new Vector3(0f, 0f, -1f);
-            //transform.localScale = new Vector3(1.5f, 1.5f, 1f);
+            nextStateFromClamp = State.OnHatch;
 
             m_CurrentAttachedEnemy = enemy;               
-        }        
+        }
+
+        //Set player to coordinate space of hatchee
+        transform.SetParent(clampedObject.transform, true);
+
+        //Reeling in should be last, since clamping is going to likely put player
+        //into the transform space of the clampee
+        m_PlayerSpear.ReelIn(() =>
+        {
+            if (nextStateFromClamp != State.None)
+                ResetStateVars(nextStateFromClamp);
+
+            if (m_PlayerState != nextStateFromClamp)
+            {
+                switch (nextStateFromClamp)
+                {
+                    case State.OnHatch:
+                        InitOnHatchState();
+                        break;
+                }
+            }
+        });
     }
 
     #endregion
@@ -582,6 +624,7 @@ public class SideviewPlayer : MonoBehaviour
             case State.OnHatch:
                 m_IsOpening = false;
                 m_HijackButton.gameObject.SetActive(false);
+                m_PlayerSpear.Clear();
                 break;
         }
     }
@@ -602,25 +645,27 @@ public class SideviewPlayer : MonoBehaviour
         else if(otherCollider.tag == "ShipHatch" && 
                 m_PlayerState == State.JumpBoost)
         {
+            //DEPRECATED...should now be handled by rope clamping
+
             //Now that we're attached to enemy, keep it in screen space
-            Enemy enemy = otherCollider.GetComponentInParent<Enemy>();
+            //Enemy enemy = otherCollider.GetComponentInParent<Enemy>();
 
-            if(m_OwnedEnemies.IndexOf(enemy) != -1)
-                return; 
+            //if(m_OwnedEnemies.IndexOf(enemy) != -1)
+            //    return; 
             
-            enemy.transform.SetParent(m_ScreenRoot);
-            enemy.SetState(Enemy.State.GettingHijacked);
+            //enemy.transform.SetParent(m_ScreenRoot);
+            //enemy.SetState(Enemy.State.GettingHijacked);
 
-            //Set player to hatch coordinate space
-            transform.SetParent(otherCollider.transform, false);
-            transform.localPosition = new Vector3(0f, 0f, -1f);
-            transform.localScale = new Vector3(1.5f, 1.5f, 1f);
+            ////Set player to hatch coordinate space
+            //transform.SetParent(otherCollider.transform, false);
+            //transform.localPosition = new Vector3(0f, 0f, -1f);
+            //transform.localScale = new Vector3(1.5f, 1.5f, 1f);
 
-            m_CurrentAttachedEnemy = enemy;
+            //m_CurrentAttachedEnemy = enemy;
 
-            ResetStateVars(State.OnHatch);
-            if(m_PlayerState != State.OnHatch)
-                InitOnHatchState();
+            //ResetStateVars(State.OnHatch);
+            //if(m_PlayerState != State.OnHatch)
+                //InitOnHatchState();
         }
         else if(otherCollider.tag == "Projectile" &&
                 m_PlayerState != State.Damaged &&
