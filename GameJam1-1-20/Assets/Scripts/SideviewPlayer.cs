@@ -77,10 +77,15 @@ public class SideviewPlayer : MonoBehaviour
     private Enemy m_CurrentControlledEnemy;
 
     //Clamp swinging vars
-    private const float kMaxClampSwingTimeWindow = .2f; //This time check should enforce the "quick swipe" motion that's needed.
+    private const float kMaxClampSwingTimeWindow = 1.5f; //This time check should enforce the "quick swipe" motion that's needed.
     private bool m_InputDownForClampSwing;
     private Vector2 m_ClampSwingScreenDownPos;
     private float m_ClampSwingDownStartTime;
+    private Vector2 m_ClampSwingVelocity;
+    private Vector2 m_ClampSwingDir;
+    private Vector2 m_ClampSwingAcceleration;
+    private bool m_IsSwingingOnClamp;
+    private System.Action m_SwingOutDoneCallback;
 
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
@@ -272,7 +277,7 @@ public class SideviewPlayer : MonoBehaviour
                 OnStoppedOpeningInHijack?.Invoke();
             }
 
-            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp)
+            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp && !m_IsSwingingOnClamp)
             {
                 //Spear being in this state means we can swipe on the screen to clamp swing
 
@@ -297,7 +302,24 @@ public class SideviewPlayer : MonoBehaviour
                         Vector2 swipeDir = (worldSwipeEndPos - worldSwipeStartPos).normalized;
                         float swipeDist = swipeDir.magnitude;
 
+                        m_ClampSwingDir = swipeDir;
+                        m_ClampSwingVelocity = swipeDir * 30f;
+                        m_ClampSwingAcceleration = m_ClampSwingVelocity * 4;
+
                         //We now use these data points to get the player spear to do its clamp swing behavior
+                        m_IsSwingingOnClamp = true;
+                        m_SwingOutDoneCallback = () =>
+                        {
+                            Sequence topOfSwingDelay = DOTween.Sequence();
+                            topOfSwingDelay.AppendInterval(.3f);
+                            topOfSwingDelay.AppendCallback(() =>
+                            {
+                                transform.DOLocalMove(Vector2.zero, 1f).onComplete = () =>
+                                {
+                                    m_IsSwingingOnClamp = false;
+                                };
+                            });
+                        };
                     }
                 }
             }
@@ -325,6 +347,9 @@ public class SideviewPlayer : MonoBehaviour
 
         if(m_PlayerState != State.OnHatch)
             HandleMoveStep(moveVecThisFrame);
+
+        if (m_PlayerState == State.OnHatch && m_IsSwingingOnClamp)
+            HandleClampedRopeSwingOutVelocity();
 
         //Check to see if player is close to any enemies that are controlled. If yes,
         //we show the enter/leave button
@@ -517,6 +542,29 @@ public class SideviewPlayer : MonoBehaviour
                 }
             }
         });
+    }
+
+    private void HandleClampedRopeSwingOutVelocity()
+    {
+        Vector3 moveStep = (Vector3)m_ClampSwingVelocity * Time.deltaTime;
+        Vector2 nextPos = transform.position + moveStep;
+        float velocityDot = Vector2.Dot(m_ClampSwingDir, (nextPos - (Vector2)transform.position).normalized);
+        bool nextPosWillBeOutsideScreenArea = nextPos.x > m_ScreenMoveMax.x ||
+                                             nextPos.x < m_ScreenMoveMin.x ||
+                                             nextPos.y > m_ScreenMoveMax.y ||
+                                             nextPos.y < m_ScreenMoveMin.y;
+
+        if (velocityDot > 0f && !nextPosWillBeOutsideScreenArea)
+        {
+            transform.position += moveStep;
+            m_ClampSwingVelocity -= m_ClampSwingAcceleration * Time.deltaTime;
+        }
+        else
+        {
+            m_ClampSwingVelocity = m_ClampSwingAcceleration = Vector2.zero;
+            m_SwingOutDoneCallback?.Invoke();
+            m_SwingOutDoneCallback = null;
+        }
     }
 
     #endregion
