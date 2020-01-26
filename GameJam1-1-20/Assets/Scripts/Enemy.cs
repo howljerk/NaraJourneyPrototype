@@ -232,7 +232,7 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
         m_IsOpeningTotalTime = 4f;
 
         //If tier 2, create mechbot. TODO: have mechbot count be configurable
-        if (Tier == DifficultTier.Tier2)
+        if (Tier == DifficultTier.Tier2 && (m_Mechbots == null || m_Mechbots.Count == 0))
             CreateMechbot();
     }
 

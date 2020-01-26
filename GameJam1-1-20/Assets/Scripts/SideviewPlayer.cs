@@ -86,6 +86,7 @@ public class SideviewPlayer : MonoBehaviour
     private Vector2 m_ClampSwingAcceleration;
     private bool m_IsSwingingOnClamp;
     private System.Action m_SwingOutDoneCallback;
+    private Sequence m_TopOfSwingDelay;
 
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
@@ -142,20 +143,6 @@ public class SideviewPlayer : MonoBehaviour
 
         State nextState = State.None;
 
-        //Detect to go into flight state. Can't do this if we're currently in
-        //jump boost
-        //if(Input.GetKey(KeyCode.LeftCommand) && 
-        //   m_PlayerState != State.JumpBoost &&
-        //   m_PlayerState != State.Damaged && 
-        //   m_PlayerState != State.OnHatch)
-        //{
-        //    nextState = State.Flight;   
-        //    ResetStateVars(nextState);
-
-        //    if (m_PlayerState != nextState)
-        //        InitFlightState();
-        //}
-
         Vector2 moveVecThisFrame = Vector2.zero;
         bool bgInputDown = m_BackgroundTap.GetHasInput();
         bool bgInputUp = m_BackgroundTap.GetHasInputUp();
@@ -205,9 +192,7 @@ public class SideviewPlayer : MonoBehaviour
                     float timeToMaxBoost = 1f;
                     float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
                     float maxBoostAdditiveArrowScale = 7f;
-                    //m_JumpBoostRightArrow.localScale = new Vector3(1f + timeInJumpBoost / timeToMaxBoost * maxBoostAdditiveArrowScale,
-                    //1f,
-                    //1f);
+
                     m_JumpBoostRightArrow.localScale = new Vector3(maxBoostAdditiveArrowScale, 4f, 1f);
 
                     m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (lookAt.x < 0f ? -1f : 1f),
@@ -240,13 +225,6 @@ public class SideviewPlayer : MonoBehaviour
                         ResetStateVars(State.Idle);
                         InitIdleState();
                     });
-
-                    //float timeToMaxBoost = .5f;
-                    //float timeInJumpBoost = Mathf.Min(Time.realtimeSinceStartup - m_JumpBoostStartTime, timeToMaxBoost);
-
-                    //m_BoostDir = m_JumpBoostRightArrow.right;
-                    //m_BoostAcceleration = m_BoostDir * (timeInJumpBoost / timeToMaxBoost) * (m_ScreenUnitsWidth * 1.25f);
-                    //m_BoostVelocity = m_BoostAcceleration;
                 }
             }
             else if (nextState == State.None)
@@ -277,50 +255,59 @@ public class SideviewPlayer : MonoBehaviour
                 OnStoppedOpeningInHijack?.Invoke();
             }
 
-            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp && !m_IsSwingingOnClamp)
+            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp)
             {
-                //Spear being in this state means we can swipe on the screen to clamp swing
-
-                if(bgInputDown && !m_InputDownForClampSwing)
+                if(!m_IsSwingingOnClamp)
                 {
-                    m_InputDownForClampSwing = true;
-                    m_ClampSwingScreenDownPos = Input.mousePosition;
-                    m_ClampSwingDownStartTime = Time.realtimeSinceStartup;
-                }
-                else if(bgInputUp && m_InputDownForClampSwing)
-                {
-                    m_InputDownForClampSwing = false;
+                    //Spear being in this state means we can swipe on the screen to clamp swing
 
-                    float clampSwipeTime = Time.realtimeSinceStartup - m_ClampSwingDownStartTime;
-                    if(clampSwipeTime <= kMaxClampSwingTimeWindow)
+                    if (bgInputDown && !m_InputDownForClampSwing)
                     {
-                        //We'll say that this was quick enough to be considered a swipe
-
-                        Vector3 worldSwipeStartPos = Camera.main.ScreenToWorldPoint(m_ClampSwingScreenDownPos);
-                        Vector3 worldSwipeEndPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-                        //Get swipe direction and distance
-                        Vector2 swipeDir = (worldSwipeEndPos - worldSwipeStartPos).normalized;
-                        float swipeDist = swipeDir.magnitude;
-
-                        m_ClampSwingDir = swipeDir;
-                        m_ClampSwingVelocity = swipeDir * 30f;
-                        m_ClampSwingAcceleration = m_ClampSwingVelocity * 4;
-
-                        //We now use these data points to get the player spear to do its clamp swing behavior
-                        m_IsSwingingOnClamp = true;
-                        m_SwingOutDoneCallback = () =>
-                        {
-                            Sequence topOfSwingDelay = DOTween.Sequence();
-                            topOfSwingDelay.AppendInterval(.3f);
-                            topOfSwingDelay.AppendCallback(() =>
-                            {
-                                transform.DOLocalMove(Vector2.zero, 1f).onComplete = () =>
-                                {
-                                    m_IsSwingingOnClamp = false;
-                                };
-                            });
-                        };
+                        m_InputDownForClampSwing = true;
+                        m_ClampSwingScreenDownPos = Input.mousePosition;
+                        m_ClampSwingDownStartTime = Time.realtimeSinceStartup;
                     }
+                    else if (bgInputUp && m_InputDownForClampSwing)
+                    {
+                        m_InputDownForClampSwing = false;
+
+                        float clampSwipeTime = Time.realtimeSinceStartup - m_ClampSwingDownStartTime;
+                        if (clampSwipeTime <= kMaxClampSwingTimeWindow)
+                        {
+                            //We'll say that this was quick enough to be considered a swipe
+
+                            Vector3 worldSwipeStartPos = Camera.main.ScreenToWorldPoint(m_ClampSwingScreenDownPos);
+                            Vector3 worldSwipeEndPos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+                            //Get swipe direction and distance
+                            Vector2 swipeDir = (worldSwipeEndPos - worldSwipeStartPos).normalized;
+                            float swipeDist = swipeDir.magnitude;
+
+                            m_ClampSwingDir = swipeDir;
+                            m_ClampSwingVelocity = swipeDir * 30f;
+                            m_ClampSwingAcceleration = m_ClampSwingVelocity * 4;
+
+                            //We now use these data points to get the player spear to do its clamp swing behavior
+                            m_IsSwingingOnClamp = true;
+                            m_SwingOutDoneCallback = () =>
+                            {
+                                m_TopOfSwingDelay = DOTween.Sequence();
+                                m_TopOfSwingDelay.AppendInterval(.3f);
+                                m_TopOfSwingDelay.Append(transform.DOLocalMove(Vector2.zero, 1f));
+                                m_TopOfSwingDelay.AppendCallback(() =>
+                                {
+                                    m_TopOfSwingDelay = null;
+                                    m_IsSwingingOnClamp = false;
+                                });
+                            };
+                        }
+                    }
+                }
+                else if(bgInputUp && m_TopOfSwingDelay != null)
+                {
+                    ResetStateVars(State.Idle);
+
+                    if (m_PlayerState != State.Idle)
+                        InitIdleState();
                 }
             }
         }
@@ -670,9 +657,21 @@ public class SideviewPlayer : MonoBehaviour
                 DOTween.To(x => m_BackgroundScroller.SetScrollSpeed(x), kFlightMaxScrollSpeed, 0, 2f);
                 break;
             case State.OnHatch:
-                m_IsOpening = false;
-                m_HijackButton.gameObject.SetActive(false);
-                m_PlayerSpear.Clear();
+                {
+                    if(m_TopOfSwingDelay != null)
+                        m_TopOfSwingDelay.Kill();
+
+                    m_TopOfSwingDelay = null;
+                    m_IsSwingingOnClamp = false;
+                    m_SwingOutDoneCallback = null;
+                    m_InputDownForClampSwing = false;
+
+                    m_PlayerSpear.ResetToIdle();
+
+                    m_IsOpening = false;
+                    m_HijackButton.gameObject.SetActive(false);
+                    m_PlayerSpear.Clear();
+                }
                 break;
         }
     }

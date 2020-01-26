@@ -59,6 +59,7 @@ public class PlayerSpear : MonoBehaviour
 
         m_SpearTip.OnCanClamp += OnSpearCanClamp;
         m_SpearTip.OnCantClamp += OnSpearCantClamp;
+        m_SpearTip.OnRicochet += OnSpearRicochet;
     }
 
     private void Update()
@@ -67,6 +68,7 @@ public class PlayerSpear : MonoBehaviour
 
     public void Clear()
     {
+        m_CanClamp = false;
         m_PulledBackInCallback = null;
 
         m_SpearTip.gameObject.SetActive(false);
@@ -77,6 +79,12 @@ public class PlayerSpear : MonoBehaviour
         m_RopeSegments.Clear();
 
         CancelRopeMovement();
+    }
+
+    public void ResetToIdle()
+    {
+        m_State = State.Idle;
+        Clear();
     }
 
     public void CancelRopeMovement()
@@ -228,7 +236,7 @@ public class PlayerSpear : MonoBehaviour
 
         m_State = State.Pullback;
 
-        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
+        float tweenTime = m_CurrentDist / (kFireUnitsPerSec * 2);
 
         m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
         m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos, tweenTime);
@@ -242,6 +250,7 @@ public class PlayerSpear : MonoBehaviour
     private void OnRopePulledIn()
     {
         m_PulledBackInCallback?.Invoke();
+        m_State = State.Idle;
         Clear();
     }
 
@@ -262,7 +271,7 @@ public class PlayerSpear : MonoBehaviour
         return new Vector3(clampedX, clampedY, pos.z);
     }
 
-    #region Spear tip clamp callbacks
+    #region Spear tip callbacks
 
     private void OnSpearCanClamp(Collider2D otherCollider)
     {
@@ -290,6 +299,20 @@ public class PlayerSpear : MonoBehaviour
 
         foreach (SpriteRenderer r in m_RopeSegments)
             r.color = Color.white;
+    }
+
+    private void OnSpearRicochet(Collider2D otherCollider)
+    {
+        CancelRopeMovement();
+
+        m_State = State.Pullback;
+
+        float tweenTime = m_CurrentDist / (kFireUnitsPerSec * 2);
+
+        m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
+        m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos, tweenTime);
+        m_SpearMoveTween = m_SpearTip.transform.DOLocalMove(m_CurrentStartPos + new Vector3(0, 0, -1f), tweenTime);
+        m_SpearMoveTween.onComplete = OnRopePulledIn;
     }
 
     #endregion
