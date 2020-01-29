@@ -83,18 +83,23 @@ public class PlayerSpear : MonoBehaviour
 
     public void ResetToIdle()
     {
+        Debug.LogError("ResetToIdle()");
         m_State = State.Idle;
         Clear();
     }
 
     public void CancelRopeMovement()
     {
+        m_SpearTip.Reset();
+
         if (m_RopeMaskScaleTween != null)
             m_RopeMaskScaleTween.Kill();
         if (m_RopeMaskMoveTween != null)
             m_RopeMaskMoveTween.Kill();
         if (m_SpearMoveTween != null)
-            m_SpearMoveTween.Kill();        
+            m_SpearMoveTween.Kill();
+        if (m_PlayerReelInMoveTween != null)
+            m_PlayerReelInMoveTween.Kill();
 
         DOTween.timeScale = Time.timeScale = 1f;
 
@@ -303,6 +308,7 @@ public class PlayerSpear : MonoBehaviour
 
     private void OnSpearRicochet(Collider2D otherCollider)
     {
+        Debug.LogError("OnSpearRicochet");
         CancelRopeMovement();
 
         m_State = State.Pullback;

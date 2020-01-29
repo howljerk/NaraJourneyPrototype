@@ -8,6 +8,14 @@ public class PlayerSpearTip : MonoBehaviour
     public event System.Action<Collider2D> OnRicochet;
 
     private int m_ClampCount;
+    private Sequence m_RicochetDelaySeq;
+
+    public void Reset()
+    {
+        if (m_RicochetDelaySeq != null)
+            m_RicochetDelaySeq.Kill();
+        m_RicochetDelaySeq = null;
+    }
 
     private void OnTriggerEnter2D(Collider2D otherCollider)
     {
@@ -24,9 +32,9 @@ public class PlayerSpearTip : MonoBehaviour
 
             //TODO: Damage enemy
 
-            Sequence ricochetDelay = DOTween.Sequence();
-            ricochetDelay.AppendInterval(.1f * DOTween.timeScale);
-            ricochetDelay.AppendCallback(
+            m_RicochetDelaySeq = DOTween.Sequence();
+            m_RicochetDelaySeq.AppendInterval(.1f * DOTween.timeScale);
+            m_RicochetDelaySeq.AppendCallback(
             () => 
             {
                 OnRicochet?.Invoke(otherCollider);

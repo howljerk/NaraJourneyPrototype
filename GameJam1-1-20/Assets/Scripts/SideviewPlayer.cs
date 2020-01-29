@@ -18,7 +18,8 @@ public class SideviewPlayer : MonoBehaviour
         GoTo,
         Damaged,
         OnHatch,
-        ControllingEnemy
+        ControllingEnemy,
+        AttachedToObject
     }
 
     [SerializeField] private Animator m_Animations;
@@ -35,6 +36,7 @@ public class SideviewPlayer : MonoBehaviour
     [SerializeField] private bool m_TempDebugGetHitByProjectiles = false;
     [SerializeField] private HijackButton m_HijackButton;
     [SerializeField] private GameObject m_PlayerSpearPrefab;
+    [SerializeField] private Sprite m_DebugDamagedDirArrowSprite;
 
     //Idle state vars
     private float m_IdleScrollSpeed = 0f;
@@ -158,7 +160,8 @@ public class SideviewPlayer : MonoBehaviour
         //Detect to go into jump boost state
         if (bgInputDown && 
             m_PlayerState != State.Damaged && 
-            m_PlayerState != State.OnHatch)
+            m_PlayerState != State.OnHatch &&
+            m_PlayerState != State.AttachedToObject)
         {
             if(m_StartedBoostPath && m_PlayerSpear.CanClamp)
             {
@@ -206,7 +209,8 @@ public class SideviewPlayer : MonoBehaviour
         //would mean we can do our go-to.
         if (bgInputUp && 
             m_PlayerState != State.Damaged &&
-            m_PlayerState != State.OnHatch)
+            m_PlayerState != State.OnHatch &&
+            m_PlayerState != State.AttachedToObject)
         {
             m_PressedForBoost = false;
 
@@ -235,27 +239,30 @@ public class SideviewPlayer : MonoBehaviour
             }
         }
 
-        if(m_PlayerState == State.OnHatch)
+        if(m_PlayerState == State.OnHatch || m_PlayerState == State.AttachedToObject)
         {
-            bool hijackBtnPressed = m_HijackButton.IsHeldDown;
-
-            if(hijackBtnPressed)
+            if(m_PlayerState != State.AttachedToObject)
             {
-                if(!m_IsOpening)
+                bool hijackBtnPressed = m_HijackButton.IsHeldDown;
+
+                if (hijackBtnPressed)
                 {
-                    m_IsOpening = true;
-                    m_Animations.Play("HijackOpen");
-                    OnStartedOpeningInHijack?.Invoke();
+                    if (!m_IsOpening)
+                    {
+                        m_IsOpening = true;
+                        m_Animations.Play("HijackOpen");
+                        OnStartedOpeningInHijack?.Invoke();
+                    }
+                }
+                else if (m_IsOpening)
+                {
+                    m_IsOpening = false;
+                    m_Animations.Play("Idle");
+                    OnStoppedOpeningInHijack?.Invoke();
                 }
             }
-            else if (m_IsOpening)
-            {
-                m_IsOpening = false;
-                m_Animations.Play("Idle");
-                OnStoppedOpeningInHijack?.Invoke();
-            }
 
-            if(m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp)
+            if (m_PlayerSpear.CurrentState == PlayerSpear.State.ClosedToClamp)
             {
                 if(!m_IsSwingingOnClamp)
                 {
@@ -304,6 +311,9 @@ public class SideviewPlayer : MonoBehaviour
                 }
                 else if(bgInputUp && m_TopOfSwingDelay != null)
                 {
+                    transform.SetParent(m_ScreenRoot);
+                    transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
+
                     ResetStateVars(State.Idle);
 
                     if (m_PlayerState != State.Idle)
@@ -317,7 +327,8 @@ public class SideviewPlayer : MonoBehaviour
             m_PlayerState != State.GoTo && 
             m_PlayerState != State.JumpBoost &&
             m_PlayerState != State.Damaged &&
-            m_PlayerState != State.OnHatch)
+            m_PlayerState != State.OnHatch &&
+            m_PlayerState != State.AttachedToObject)
         {
             nextState = State.Idle;
             ResetStateVars(nextState);
@@ -335,7 +346,7 @@ public class SideviewPlayer : MonoBehaviour
         if(m_PlayerState != State.OnHatch)
             HandleMoveStep(moveVecThisFrame);
 
-        if (m_PlayerState == State.OnHatch && m_IsSwingingOnClamp)
+        if ((m_PlayerState == State.OnHatch || m_PlayerState == State.AttachedToObject) && m_IsSwingingOnClamp)
             HandleClampedRopeSwingOutVelocity();
 
         //Check to see if player is close to any enemies that are controlled. If yes,
@@ -508,9 +519,16 @@ public class SideviewPlayer : MonoBehaviour
 
             m_CurrentAttachedEnemy = enemy;               
         }
+        else
+        {
+            nextStateFromClamp = State.AttachedToObject;
+        }
 
         //Set player to coordinate space of hatchee
-        transform.SetParent(clampedObject.transform, true);
+        transform.SetParent(clampedObject.transform);
+
+        ResetStateVars(State.AttachedToObject);
+        InitAttachedToObjectState();
 
         //Reeling in should be last, since clamping is going to likely put player
         //into the transform space of the clampee
@@ -618,6 +636,14 @@ public class SideviewPlayer : MonoBehaviour
 
     #endregion
 
+    #region attached to object state
+
+    private void InitAttachedToObjectState()
+    {
+        m_PlayerState = State.AttachedToObject;
+    }
+
+    #endregion
 
     private void HandleMoveStep(Vector2 moveStep)
     {
@@ -639,6 +665,9 @@ public class SideviewPlayer : MonoBehaviour
 
         switch(m_PlayerState)
         {
+            case State.AttachedToObject:
+                //I think some resetting stuff from this state will be contextual and not single purpose...
+                break;
             case State.GoTo:
                 if (m_GoToTween != null)
                     m_GoToTween.Kill();
@@ -676,18 +705,37 @@ public class SideviewPlayer : MonoBehaviour
         }
     }
 
+    private GameObject m_DebugDamageHitArrow;
+    private Sequence m_DebugDamageHideSeq;
+
     private void OnTriggerEnter2D(Collider2D otherCollider)
     {
         if (m_PlayerState == State.ControllingEnemy)
             return;
 
         if(otherCollider.tag == "Enemy" && 
-           m_PlayerState != State.OnHatch)
+           m_PlayerState != State.OnHatch &&
+           m_PlayerState != State.AttachedToObject)
         {
+            //TODO: Put this in for enemy mechbots...I think staying attached to ships is cool.
+            //==============================================================================
+            //if (m_PlayerState == State.AttachedToObject)
+            //{
+            //    m_PlayerSpear.ResetToIdle();
+            //    transform.SetParent(m_ScreenRoot);
+            //    //Hack
+            //    transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
+            //}
+            //==============================================================================
+
             ResetStateVars(State.Damaged);
             m_DamagedDir = (transform.position - otherCollider.gameObject.transform.position).normalized;
             m_DamagedAcceleration = m_DamagedVelocity = m_DamagedDir * 20f;
             InitDamagedState();
+
+            ShowDamageDirDebugArrow(otherCollider.gameObject.transform.parent,
+                m_DamagedDir,
+                new Vector3(otherCollider.gameObject.transform.position.x, otherCollider.gameObject.transform.position.y, -5f));
         }
         else if(otherCollider.tag == "ShipHatch" && 
                 m_PlayerState == State.JumpBoost)
@@ -718,7 +766,7 @@ public class SideviewPlayer : MonoBehaviour
                 m_PlayerState != State.Damaged &&
                 m_TempDebugGetHitByProjectiles)
         {
-            transform.SetParent(m_ScreenRoot.transform);
+            transform.SetParent(m_ScreenRoot);
             transform.localScale = m_InitScale;
 
             ResetStateVars(State.Damaged);
@@ -740,7 +788,8 @@ public class SideviewPlayer : MonoBehaviour
             return;
 
         if (otherCollider.tag == "Enemy" &&
-           m_PlayerState != State.OnHatch)
+           m_PlayerState != State.OnHatch &&
+           m_PlayerState != State.AttachedToObject)
         {
             ResetStateVars(State.Damaged);
             m_DamagedDir = (transform.position - otherCollider.gameObject.transform.position).normalized;
@@ -796,6 +845,34 @@ public class SideviewPlayer : MonoBehaviour
         m_Animations.Play("InEnemy");
         m_PlayerState = State.ControllingEnemy;
         m_BackgroundScroller.SetScrollSpeed(0f);
+    }
+
+    private void ShowDamageDirDebugArrow(Transform arrowParent, Vector2 dir, Vector3 arrowPos)
+    {
+        if (m_DebugDamageHitArrow == null)
+        {
+            m_DebugDamageHitArrow = new GameObject("damage_dir_debug_arrow");
+            SpriteRenderer spriteRenderer = m_DebugDamageHitArrow.AddComponent<SpriteRenderer>();
+            spriteRenderer.sprite = m_DebugDamagedDirArrowSprite;
+            spriteRenderer.color = Color.yellow;
+        }
+
+        m_DebugDamageHitArrow.SetActive(true);
+        m_DebugDamageHitArrow.transform.position = arrowPos;
+        m_DebugDamageHitArrow.transform.SetParent(arrowParent);
+        m_DebugDamageHitArrow.transform.localScale = new Vector3(.2f, .2f, 1f);
+        m_DebugDamageHitArrow.transform.localRotation = Quaternion.Euler(new Vector3(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg));
+
+        if (m_DebugDamageHideSeq != null)
+            m_DebugDamageHideSeq.Kill();
+
+        m_DebugDamageHideSeq = DOTween.Sequence();
+        m_DebugDamageHideSeq.AppendInterval(1f);
+        m_DebugDamageHideSeq.AppendCallback(() =>
+        {
+            m_DebugDamageHitArrow.SetActive(false);
+            m_DebugDamageHideSeq = null;
+        });
     }
 
     public void OnIntroDone()
