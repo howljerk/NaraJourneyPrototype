@@ -94,6 +94,9 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
     public State CurrState { get; set; } = State.Patrol;
     public DifficultTier Tier { get; set; } = DifficultTier.Tier1;
 
+    public event System.Action OnOffscreen;
+    private bool m_MessagedOffscreen;
+
     private void Awake()
     {
         m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
@@ -297,6 +300,18 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
 
     #endregion
 
+    private bool GetIsEnemyOffscreen()
+    {
+        bool playerTravelingRight = m_Player.TravelDir == 1;
+        float unitsHeight = Camera.main.orthographicSize * 2f;
+        float aspectRatio = (float)Screen.width / (float)Screen.height;
+        float unitsWidth = unitsHeight * aspectRatio;
+        float offscreenX = -unitsWidth * .5f * (playerTravelingRight ? 1 : -1);
+
+        return ((playerTravelingRight && transform.position.x < offscreenX) ||
+            (!playerTravelingRight && transform.position.x > offscreenX));
+    }
+
     private bool GetIsEnemyTooFarAway()
     {
         bool playerTravelingRight = m_Player.TravelDir == 1;
@@ -320,6 +335,7 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
         doSequence();
     }
 
+
     // Update is called once per frame
     void Update()
     {
@@ -339,6 +355,15 @@ public class Enemy : MonoBehaviour, IMarkerTrackedEntity
                 vel = new Vector3(-kEnemySpeed * TravelDir, 0f, 0f);
 
             transform.position += vel * Time.deltaTime;
+
+            if(GetIsEnemyOffscreen())
+            {
+                if(!m_MessagedOffscreen)
+                {
+                    m_MessagedOffscreen = true;
+                    OnOffscreen?.Invoke();
+                }
+            }
 
             if (GetIsEnemyTooFarAway())
             {

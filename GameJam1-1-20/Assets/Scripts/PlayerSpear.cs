@@ -20,7 +20,7 @@ public class PlayerSpear : MonoBehaviour
     [SerializeField] private PlayerSpearTip m_SpearTip;
     [SerializeField] private GameObject m_RopeShowMask;
 
-    private const float kFireDist = 10f;
+    private const float kFireDist = 7f;
     private const float kFireUnitsPerSec = 12f;
 
     private State m_State = State.Idle;
@@ -44,7 +44,7 @@ public class PlayerSpear : MonoBehaviour
     private Tweener m_PlayerReelInMoveTween;
     private Vector3 m_CurrentStartPos;
     private Vector3 m_CurrentEndPos;
-    private float m_CurrentDist;
+    private float m_CurrentFireDist;
     private System.Action m_PulledBackInCallback;
     private System.Action m_ReeledInCallback;
 
@@ -83,7 +83,6 @@ public class PlayerSpear : MonoBehaviour
 
     public void ResetToIdle()
     {
-        Debug.LogError("ResetToIdle()");
         m_State = State.Idle;
         Clear();
     }
@@ -114,60 +113,23 @@ public class PlayerSpear : MonoBehaviour
         transform.position = new Vector3(startPos.x, startPos.y, transform.position.z);
 
         Vector3 endPos = GetClampedToScreenAreaPos(transform.position + (Vector3)(dir * kFireDist));
-        dir = (endPos - transform.position).normalized;
 
-        m_CurrentDist = (endPos - transform.position).magnitude;
+        float ropeWorldUnitLength = 0f;
+        float ropeAngle = 0f;
+        Vector2 ropeWorldDir = Vector2.zero;
+        BuildRopeBetweenTwoPoints(startPos, endPos, out ropeWorldUnitLength, out ropeAngle, out ropeWorldDir);
 
-        Vector3 screenStartPos = Camera.main.WorldToScreenPoint(startPos);
-        Vector3 screenEndPos = Camera.main.WorldToScreenPoint(endPos);
-        Vector2 lookAt = (screenEndPos - screenStartPos).normalized;
-        float angle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
-        float pos = 0f;
-        float segmentScale = 1f;
-        float segmentWidthPlusHalf = 1.5f * segmentScale;
-        float segmentWidth = 1.0f * segmentScale;
+        m_CurrentFireDist = ropeWorldUnitLength;
 
-        for (float d = 0f; !Mathf.Approximately(d, m_CurrentDist);)
-        {
-            float totalDistDiff = m_CurrentDist - d;
-            float xScale = 1f * segmentScale;
+        float tweenTime = ropeWorldUnitLength / kFireUnitsPerSec;
 
-            if (totalDistDiff >= segmentWidthPlusHalf)
-            {
-                pos += segmentWidth;
-                d += segmentWidth;
-            }
-            else
-            {
-                xScale = (totalDistDiff - segmentWidth * .5f) / segmentWidth;
-                pos += segmentWidth * .5f + (totalDistDiff - segmentWidth * .5f) * .5f;
-                d += totalDistDiff;
-            }
-
-            Vector3 ropePos = startPos + (Vector3)dir * pos;
-
-            GameObject rope = new GameObject("rope");
-            rope.transform.SetParent(m_RopeNode.transform);
-            rope.transform.position = ropePos;
-            rope.transform.rotation = Quaternion.Euler(new Vector3(0f, 0f, angle));
-            rope.transform.localScale = new Vector3(xScale, .1f, 1f);
-
-            SpriteRenderer ropeSprite = rope.AddComponent<SpriteRenderer>();
-            ropeSprite.sprite = m_RopeSprite;
-            ropeSprite.maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
-
-            m_RopeSegments.Add(ropeSprite);
-        }
-
-        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
-
-        m_RopeShowMask.transform.localRotation = Quaternion.Euler(new Vector3(0f, 0f, angle));
+        m_RopeShowMask.transform.localRotation = Quaternion.Euler(new Vector3(0f, 0f, ropeAngle));
 
         if (m_RopeMaskScaleTween != null)
             m_RopeMaskScaleTween.Kill();
 
         m_RopeShowMask.transform.localScale = new Vector3(0f, 1f, 1f);
-        m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(pos, tweenTime);
+        m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(ropeWorldUnitLength, tweenTime);
 
         if (m_RopeMaskMoveTween != null)
             m_RopeMaskMoveTween.Kill();
@@ -176,7 +138,7 @@ public class PlayerSpear : MonoBehaviour
         m_CurrentEndPos = m_RopeShowMask.transform.parent.InverseTransformPoint(endPos);
 
         m_RopeShowMask.transform.localPosition = m_CurrentStartPos;
-        m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos + (Vector3)dir * m_CurrentDist * .5f, tweenTime);
+        m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos + (Vector3)ropeWorldDir * ropeWorldUnitLength * .5f, tweenTime);
 
         if (m_SpearMoveTween != null)
             m_SpearMoveTween.Kill();
@@ -193,7 +155,7 @@ public class PlayerSpear : MonoBehaviour
     {
         m_State = State.ReelingIn;
 
-        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
+        float tweenTime = m_CurrentFireDist / kFireUnitsPerSec;
 
         m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
         m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(Vector3.zero, tweenTime);
@@ -207,18 +169,34 @@ public class PlayerSpear : MonoBehaviour
         m_ReeledInCallback = reeledInCallback;
     }
 
-    //TODO: WIP
-    public void SwingAwayFromClamp(Vector3 startPos, Vector2 dir, float swingDistance)
+    public void SetRopeLengthBetweenAnchors(Vector3 anchorWorldStart, Vector3 anchorWorldEnd)
     {
-        m_State = State.SwingingOutFromClamp;
-        m_CurrentDist = swingDistance;
+        //Make sure to have clean slate for rope segments before building between 2 anchor points
+        foreach (SpriteRenderer r in m_RopeSegments)
+            Destroy(r.gameObject);
+        m_RopeSegments.Clear();
 
-        transform.position = new Vector3(startPos.x, startPos.y, transform.position.z);
+        Vector3 spearTipPos = m_SpearTip.transform.position;
+        m_SpearTip.transform.position = new Vector3(anchorWorldEnd.x, anchorWorldEnd.y, spearTipPos.z);
+        m_SpearTip.gameObject.SetActive(true);
 
-        Vector3 endPos = GetClampedToScreenAreaPos(transform.position + (Vector3)(dir * kFireDist));
-        dir = (endPos - transform.position).normalized;
+        float ropeWorldUnitLength = 0f;
+        float ropeAngle = 0f;
+        Vector2 ropeWorldDir = Vector2.zero;
+        BuildRopeBetweenTwoPoints(anchorWorldStart, anchorWorldEnd, out ropeWorldUnitLength, out ropeAngle, out ropeWorldDir);
 
-        float tweenTime = m_CurrentDist / kFireUnitsPerSec;
+        Vector3 anchorLocalStart = m_RopeShowMask.transform.parent.InverseTransformPoint(anchorWorldStart);
+
+        m_RopeShowMask.transform.localRotation = Quaternion.Euler(new Vector3(0f, 0f, ropeAngle));
+        m_RopeShowMask.transform.localScale = new Vector3(ropeWorldUnitLength,
+                                                        m_RopeShowMask.transform.localScale.y,
+                                                        m_RopeShowMask.transform.localScale.z);
+        m_RopeShowMask.transform.localPosition = (Vector3)anchorLocalStart + (Vector3)ropeWorldDir * ropeWorldUnitLength * .5f; 
+    }
+
+    public void SetClosedToClampState()
+    {
+        m_State = State.ClosedToClamp;
     }
 
     /// <summary>
@@ -241,7 +219,7 @@ public class PlayerSpear : MonoBehaviour
 
         m_State = State.Pullback;
 
-        float tweenTime = m_CurrentDist / (kFireUnitsPerSec * 2);
+        float tweenTime = m_CurrentFireDist / (kFireUnitsPerSec * 2);
 
         m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
         m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos, tweenTime);
@@ -276,6 +254,36 @@ public class PlayerSpear : MonoBehaviour
         return new Vector3(clampedX, clampedY, pos.z);
     }
 
+    private void BuildRopeBetweenTwoPoints(Vector3 startPos,
+                                          Vector3 endPos,
+                                          out float ropeWorldUnitLength,
+                                          out float ropeAngle,
+                                          out Vector2 ropeWorldDir)
+    {
+        Vector3 screenStartPos = Camera.main.WorldToScreenPoint(startPos);
+        Vector3 screenEndPos = Camera.main.WorldToScreenPoint(endPos);
+        Vector2 lookAt = (screenEndPos - screenStartPos).normalized;
+        Vector2 worldDir = (endPos - startPos).normalized;
+        float currentDist = (endPos - startPos).magnitude;
+        float angle = Mathf.Atan2(lookAt.y, lookAt.x) * Mathf.Rad2Deg;
+
+        GameObject rope = new GameObject("rope");
+        rope.transform.SetParent(m_RopeNode.transform);
+        rope.transform.position = (endPos + startPos) * .5f;
+        rope.transform.rotation = Quaternion.Euler(new Vector3(0f, 0f, angle));
+        rope.transform.localScale = new Vector3(currentDist, .1f, 1f);
+
+        SpriteRenderer ropeSprite = rope.AddComponent<SpriteRenderer>();
+        ropeSprite.sprite = m_RopeSprite;
+        ropeSprite.maskInteraction = SpriteMaskInteraction.VisibleInsideMask;
+
+        m_RopeSegments.Add(ropeSprite);
+
+        ropeWorldUnitLength = currentDist;
+        ropeAngle = angle;
+        ropeWorldDir = worldDir;
+    }
+
     #region Spear tip callbacks
 
     private void OnSpearCanClamp(Collider2D otherCollider)
@@ -308,12 +316,14 @@ public class PlayerSpear : MonoBehaviour
 
     private void OnSpearRicochet(Collider2D otherCollider)
     {
-        Debug.LogError("OnSpearRicochet");
+        if (m_State != State.Extending)
+            return;
+
         CancelRopeMovement();
 
         m_State = State.Pullback;
 
-        float tweenTime = m_CurrentDist / (kFireUnitsPerSec * 2);
+        float tweenTime = m_CurrentFireDist / (kFireUnitsPerSec * 2);
 
         m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
         m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos, tweenTime);

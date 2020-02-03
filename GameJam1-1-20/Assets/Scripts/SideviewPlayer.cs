@@ -89,6 +89,8 @@ public class SideviewPlayer : MonoBehaviour
     private bool m_IsSwingingOnClamp;
     private System.Action m_SwingOutDoneCallback;
     private Sequence m_TopOfSwingDelay;
+    private Transform m_RopeSwingOutParent;
+    private Vector2 m_RopeSwingOutEndWorldLocalPos;
 
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
@@ -281,6 +283,10 @@ public class SideviewPlayer : MonoBehaviour
                         float clampSwipeTime = Time.realtimeSinceStartup - m_ClampSwingDownStartTime;
                         if (clampSwipeTime <= kMaxClampSwingTimeWindow)
                         {
+                            //Reset spear to its idle state before doing any swing out behavior
+                            m_PlayerSpear.ResetToIdle();
+                            m_PlayerSpear.SetClosedToClampState();
+
                             //We'll say that this was quick enough to be considered a swipe
 
                             Vector3 worldSwipeStartPos = Camera.main.ScreenToWorldPoint(m_ClampSwingScreenDownPos);
@@ -291,15 +297,20 @@ public class SideviewPlayer : MonoBehaviour
 
                             m_ClampSwingDir = swipeDir;
                             m_ClampSwingVelocity = swipeDir * 30f;
-                            m_ClampSwingAcceleration = m_ClampSwingVelocity * 4;
+                            m_ClampSwingAcceleration = m_ClampSwingVelocity * 4f;
 
                             //We now use these data points to get the player spear to do its clamp swing behavior
                             m_IsSwingingOnClamp = true;
+                            m_RopeSwingOutEndWorldLocalPos = transform.localPosition;
+                            m_RopeSwingOutParent = transform.parent;
+                            Vector3 swingInDestPos = transform.localPosition;
+
                             m_SwingOutDoneCallback = () =>
                             {
+                                Vector3 localMoveDest = swingInDestPos;
                                 m_TopOfSwingDelay = DOTween.Sequence();
                                 m_TopOfSwingDelay.AppendInterval(.3f);
-                                m_TopOfSwingDelay.Append(transform.DOLocalMove(Vector2.zero, 1f));
+                                m_TopOfSwingDelay.Append(DOTween.To(GetCurrentPosFromRopeSwingIn, HandleClampedRopeSwingInVelocity, localMoveDest, 1f));
                                 m_TopOfSwingDelay.AppendCallback(() =>
                                 {
                                     m_TopOfSwingDelay = null;
@@ -311,6 +322,12 @@ public class SideviewPlayer : MonoBehaviour
                 }
                 else if(bgInputUp && m_TopOfSwingDelay != null)
                 {
+                    m_TopOfSwingDelay.Kill();
+                    m_TopOfSwingDelay = null;
+
+                    m_PlayerSpear.ResetToIdle();
+                    m_InputDownForClampSwing = m_IsSwingingOnClamp = false;
+
                     transform.SetParent(m_ScreenRoot);
                     transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
 
@@ -343,7 +360,7 @@ public class SideviewPlayer : MonoBehaviour
         if (m_PlayerState == State.Damaged)
             HandleDamagedVelocity(ref moveVecThisFrame);
 
-        if(m_PlayerState != State.OnHatch)
+        //if(m_PlayerState != State.OnHatch && m_PlayerState != State.AttachedToObject)
             HandleMoveStep(moveVecThisFrame);
 
         if ((m_PlayerState == State.OnHatch || m_PlayerState == State.AttachedToObject) && m_IsSwingingOnClamp)
@@ -524,6 +541,14 @@ public class SideviewPlayer : MonoBehaviour
             nextStateFromClamp = State.AttachedToObject;
         }
 
+
+        if(clampedObject.tag == "Enemy")
+        {
+            Enemy enemy = clampedObject.GetComponentInParent<Enemy>();
+            enemy.OnOffscreen -= OnEnemyOffscreenWhileAttached;
+            enemy.OnOffscreen += OnEnemyOffscreenWhileAttached;
+        }
+
         //Set player to coordinate space of hatchee
         transform.SetParent(clampedObject.transform);
 
@@ -549,27 +574,26 @@ public class SideviewPlayer : MonoBehaviour
         });
     }
 
-    private void HandleClampedRopeSwingOutVelocity()
+    private void OnEnemyOffscreenWhileAttached()
     {
-        Vector3 moveStep = (Vector3)m_ClampSwingVelocity * Time.deltaTime;
-        Vector2 nextPos = transform.position + moveStep;
-        float velocityDot = Vector2.Dot(m_ClampSwingDir, (nextPos - (Vector2)transform.position).normalized);
-        bool nextPosWillBeOutsideScreenArea = nextPos.x > m_ScreenMoveMax.x ||
-                                             nextPos.x < m_ScreenMoveMin.x ||
-                                             nextPos.y > m_ScreenMoveMax.y ||
-                                             nextPos.y < m_ScreenMoveMin.y;
+        if (m_PlayerState != State.OnHatch && m_PlayerState != State.AttachedToObject)
+            return;
 
-        if (velocityDot > 0f && !nextPosWillBeOutsideScreenArea)
-        {
-            transform.position += moveStep;
-            m_ClampSwingVelocity -= m_ClampSwingAcceleration * Time.deltaTime;
-        }
-        else
-        {
-            m_ClampSwingVelocity = m_ClampSwingAcceleration = Vector2.zero;
-            m_SwingOutDoneCallback?.Invoke();
-            m_SwingOutDoneCallback = null;
-        }
+        if(m_TopOfSwingDelay != null)
+            m_TopOfSwingDelay.Kill();
+        m_TopOfSwingDelay = null;
+
+        //Reset rope slinging state stuff
+        m_PlayerSpear.ResetToIdle();
+        m_InputDownForClampSwing = m_IsSwingingOnClamp = false;
+
+        transform.SetParent(m_ScreenRoot);
+        transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
+
+        ResetStateVars(State.Idle);
+
+        if (m_PlayerState != State.Idle)
+            InitIdleState();
     }
 
     #endregion
@@ -641,6 +665,50 @@ public class SideviewPlayer : MonoBehaviour
     private void InitAttachedToObjectState()
     {
         m_PlayerState = State.AttachedToObject;
+    }
+
+    private void HandleClampedRopeSwingOutVelocity()
+    {
+        Vector3 moveStep = (Vector3)m_ClampSwingVelocity * Time.deltaTime;
+        Vector2 nextPos = transform.position + moveStep;
+        float velocityDot = Vector2.Dot(m_ClampSwingDir, (nextPos - (Vector2)transform.position).normalized);
+        bool nextPosWillBeOutsideScreenArea = nextPos.x > m_ScreenMoveMax.x ||
+                                             nextPos.x < m_ScreenMoveMin.x ||
+                                             nextPos.y > m_ScreenMoveMax.y ||
+                                             nextPos.y < m_ScreenMoveMin.y;
+
+        if (velocityDot > 0f && !nextPosWillBeOutsideScreenArea)
+        {
+            transform.position += moveStep;
+            m_ClampSwingVelocity -= m_ClampSwingAcceleration * Time.deltaTime;
+        }
+        else
+        {
+            m_ClampSwingVelocity = m_ClampSwingAcceleration = Vector2.zero;
+            m_SwingOutDoneCallback?.Invoke();
+            m_SwingOutDoneCallback = null;
+        }
+
+        HandleMoveStep(Vector2.zero);
+
+        Vector3 anchorEndWorldPos = m_RopeSwingOutParent.TransformPoint(m_RopeSwingOutEndWorldLocalPos);
+        m_PlayerSpear.SetRopeLengthBetweenAnchors(transform.position,
+                new Vector3(anchorEndWorldPos.x, anchorEndWorldPos.y, transform.position.z));
+    }
+
+    private Vector3 GetCurrentPosFromRopeSwingIn()
+    {
+        return transform.localPosition;
+    }
+
+    private void HandleClampedRopeSwingInVelocity(Vector3 pos)
+    {
+        transform.localPosition = pos;
+        HandleMoveStep(Vector3.zero);
+
+        Vector3 anchorEndWorldPos = m_RopeSwingOutParent.TransformPoint(m_RopeSwingOutEndWorldLocalPos);
+        m_PlayerSpear.SetRopeLengthBetweenAnchors(transform.position,
+                new Vector3(anchorEndWorldPos.x, anchorEndWorldPos.y, transform.position.z));
     }
 
     #endregion
