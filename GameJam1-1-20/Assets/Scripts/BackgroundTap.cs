@@ -16,8 +16,6 @@ public class BackgroundTap : MonoBehaviour
         m_TapCollider.size = new Vector2(unitsWidth, unitsHeight);
     }
 
-
-
     private void Update()
     {
         if (EventSystem.current.IsPointerOverGameObject(-1))

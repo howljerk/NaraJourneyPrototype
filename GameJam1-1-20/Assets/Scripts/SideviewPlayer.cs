@@ -91,6 +91,7 @@ public class SideviewPlayer : MonoBehaviour
     private Sequence m_TopOfSwingDelay;
     private Transform m_RopeSwingOutParent;
     private Vector2 m_RopeSwingOutEndWorldLocalPos;
+    private Tweener m_TugClampMoveTween;
 
     private State m_PlayerState;
     public State PlayerState { get { return m_PlayerState; } }
@@ -128,7 +129,7 @@ public class SideviewPlayer : MonoBehaviour
         GameObject spearObj = Instantiate(m_PlayerSpearPrefab);
         m_PlayerSpear = spearObj.GetComponent<PlayerSpear>();
         m_PlayerSpear.transform.SetParent(transform, false);
-        m_PlayerSpear.Player = this;
+        //m_PlayerSpear.Player = this;
 
         Enemy.OnSuccessfullyHijacked += OnSuccessfullyHijackedEnemy;
         GameHUD.OnLeaveOrEnterShipButtonTapped += OnEnterOrLeaveShipHUDButtonClicked;
@@ -295,6 +296,10 @@ public class SideviewPlayer : MonoBehaviour
                             Vector2 swipeDir = (worldSwipeEndPos - worldSwipeStartPos).normalized;
                             float swipeDist = swipeDir.magnitude;
 
+                            m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (swipeDir.x > 0 ? -1 : 1),
+                                                                    m_DisplayRoot.localScale.y,
+                                                                    m_DisplayRoot.localScale.z);
+
                             m_ClampSwingDir = swipeDir;
                             m_ClampSwingVelocity = swipeDir * 30f;
                             m_ClampSwingAcceleration = m_ClampSwingVelocity * 4f;
@@ -322,19 +327,7 @@ public class SideviewPlayer : MonoBehaviour
                 }
                 else if(bgInputUp && m_TopOfSwingDelay != null)
                 {
-                    m_TopOfSwingDelay.Kill();
-                    m_TopOfSwingDelay = null;
-
-                    m_PlayerSpear.ResetToIdle();
-                    m_InputDownForClampSwing = m_IsSwingingOnClamp = false;
-
-                    transform.SetParent(m_ScreenRoot);
-                    transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
-
-                    ResetStateVars(State.Idle);
-
-                    if (m_PlayerState != State.Idle)
-                        InitIdleState();
+                    TugOffRopeClamp();
                 }
             }
         }
@@ -416,7 +409,7 @@ public class SideviewPlayer : MonoBehaviour
         m_GoToTravelTime = gotoLength.magnitude / kGoToUnitsPerSec;
         m_GoToTravelDir = gotoLength.normalized;
 
-        m_DisplayRoot.localScale = new Vector3(m_DisplayRoot.localScale.x * (m_GoToTravelDir.x > 0 ? 1 : -1),
+        m_DisplayRoot.localScale = new Vector3(Mathf.Abs(m_DisplayRoot.localScale.x) * (m_GoToTravelDir.x > 0 ? 1 : -1),
                                                m_DisplayRoot.localScale.y,
                                                m_DisplayRoot.localScale.z);
 
@@ -551,6 +544,7 @@ public class SideviewPlayer : MonoBehaviour
 
         //Set player to coordinate space of hatchee
         transform.SetParent(clampedObject.transform);
+        transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
 
         ResetStateVars(State.AttachedToObject);
         InitAttachedToObjectState();
@@ -574,7 +568,7 @@ public class SideviewPlayer : MonoBehaviour
         });
     }
 
-    private void OnEnemyOffscreenWhileAttached()
+    private void TugOffRopeClamp()
     {
         if (m_PlayerState != State.OnHatch && m_PlayerState != State.AttachedToObject)
             return;
@@ -583,17 +577,52 @@ public class SideviewPlayer : MonoBehaviour
             m_TopOfSwingDelay.Kill();
         m_TopOfSwingDelay = null;
 
-        //Reset rope slinging state stuff
-        m_PlayerSpear.ResetToIdle();
+        if (m_TugClampMoveTween != null)
+            m_TugClampMoveTween.Kill();
+        m_TugClampMoveTween = null;
+
+        Vector2 anchorEndWorldPos = m_RopeSwingOutParent.TransformPoint(m_RopeSwingOutEndWorldLocalPos);
+        Vector2 tugBackDir = ((Vector2)transform.position - anchorEndWorldPos).normalized;
+        float tugBackDist = 1.5f;
+
+        m_TugClampMoveTween = DOTween.To(GetCurrTugOffRopePos, HandleTugOffRopePosUpdate, transform.position + new Vector3(tugBackDir.x, tugBackDir.y, 0f) * tugBackDist, .2f);
+        m_TugClampMoveTween.onComplete = () =>
+        {
+            m_PlayerSpear.TugBackClampedRope(() =>
+            {
+                ResetStateVars(State.Idle);
+
+                if (m_PlayerState != State.Idle)
+                    InitIdleState();
+            });
+        };
+
         m_InputDownForClampSwing = m_IsSwingingOnClamp = false;
 
         transform.SetParent(m_ScreenRoot);
         transform.position = new Vector3(transform.position.x, transform.position.y, -2f);
+    }
 
-        ResetStateVars(State.Idle);
+    private void HandleTugOffRopePosUpdate(Vector3 pos)
+    {
+        transform.position = pos;
 
-        if (m_PlayerState != State.Idle)
-            InitIdleState();
+        Vector3 anchorEndWorldPos = m_RopeSwingOutParent.TransformPoint(m_RopeSwingOutEndWorldLocalPos);
+        m_PlayerSpear.SetRopeLengthBetweenAnchors(transform.position,
+                new Vector3(anchorEndWorldPos.x, anchorEndWorldPos.y, transform.position.z));
+    }
+
+    private Vector3 GetCurrTugOffRopePos()
+    {
+        return transform.position;
+    }
+
+    private void OnEnemyOffscreenWhileAttached()
+    {
+        if (m_PlayerState != State.OnHatch && m_PlayerState != State.AttachedToObject)
+            return;
+
+        TugOffRopeClamp();
     }
 
     #endregion
@@ -679,7 +708,7 @@ public class SideviewPlayer : MonoBehaviour
 
         if (velocityDot > 0f && !nextPosWillBeOutsideScreenArea)
         {
-            transform.position += moveStep;
+            transform.position += new Vector3(moveStep.x, moveStep.y, 0f);
             m_ClampSwingVelocity -= m_ClampSwingAcceleration * Time.deltaTime;
         }
         else

@@ -25,12 +25,23 @@ public class PlayerSpearTip : MonoBehaviour
                 OnCanClamp?.Invoke(otherCollider);   
         }
 
+        if(otherCollider.tag == "AttackableEnemy")
+        {
+            if (otherCollider.tag == "AttackableEnemy")
+            {
+                IAttackableEnemy attackableEnemy = otherCollider.GetComponent<IAttackableEnemy>();
+                if (attackableEnemy == null)
+                    attackableEnemy = otherCollider.GetComponentInChildren<IAttackableEnemy>();
+
+                attackableEnemy.OnAttacked();
+                OnRicochet?.Invoke(otherCollider);
+            }
+        }
+
         if (otherCollider.tag == "Enemy")
         {
             if (++m_ClampCount == 1)
                 OnCanClamp?.Invoke(otherCollider);
-
-            //TODO: Damage enemy
 
             m_RicochetDelaySeq = DOTween.Sequence();
             m_RicochetDelaySeq.AppendInterval(.1f * DOTween.timeScale);

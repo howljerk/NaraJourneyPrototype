@@ -11,7 +11,8 @@ public class PlayerSpear : MonoBehaviour
         Pullback,
         ReelingIn,
         ClosedToClamp,
-        SwingingOutFromClamp
+        SwingingOutFromClamp,
+        TuggedFromClamp
     }
 
     [SerializeField] private Sprite m_RopeSprite;
@@ -20,7 +21,7 @@ public class PlayerSpear : MonoBehaviour
     [SerializeField] private PlayerSpearTip m_SpearTip;
     [SerializeField] private GameObject m_RopeShowMask;
 
-    private const float kFireDist = 7f;
+    private const float kFireDist = 5f;
     private const float kFireUnitsPerSec = 12f;
 
     private State m_State = State.Idle;
@@ -29,15 +30,11 @@ public class PlayerSpear : MonoBehaviour
     private bool m_CanClamp = false;
     public bool CanClamp { get { return m_CanClamp; } }
 
-    public SideviewPlayer Player { get; set; }
+    public FallingPlayer Player { get; set; }
 
     public GameObject ClampedObject { get; private set; }
 
     private List<SpriteRenderer> m_RopeSegments = new List<SpriteRenderer>();
-    private Vector2 m_ScreenMoveMin = Vector2.zero;
-    private Vector2 m_ScreenMoveMax = Vector2.zero;
-    private float m_ScreenUnitsWidth = 0f;
-    private float m_ScreenUnitsHeight = 0f;
     private Tweener m_RopeMaskScaleTween;
     private Tweener m_RopeMaskMoveTween;
     private Tweener m_SpearMoveTween;
@@ -47,16 +44,13 @@ public class PlayerSpear : MonoBehaviour
     private float m_CurrentFireDist;
     private System.Action m_PulledBackInCallback;
     private System.Action m_ReeledInCallback;
+    private System.Action m_TugDoneCallback;
+    private FallingPlayerCam m_FallingPlayerCam;
+
+    public FallingPlayerCam FallingPlayerCam {  set { m_FallingPlayerCam = value; } }
 
     private void Awake()
     {
-        m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
-        float aspectRatio = (float)Screen.width / (float)Screen.height;
-        m_ScreenUnitsWidth = m_ScreenUnitsHeight * aspectRatio;
-
-        m_ScreenMoveMin = new Vector2(-m_ScreenUnitsWidth * .5f + 1f, -m_ScreenUnitsHeight * .5f + 1f);
-        m_ScreenMoveMax = new Vector2(m_ScreenUnitsWidth * .5f - 1f, m_ScreenUnitsHeight * .5f - 1f);
-
         m_SpearTip.OnCanClamp += OnSpearCanClamp;
         m_SpearTip.OnCantClamp += OnSpearCantClamp;
         m_SpearTip.OnRicochet += OnSpearRicochet;
@@ -112,7 +106,8 @@ public class PlayerSpear : MonoBehaviour
 
         transform.position = new Vector3(startPos.x, startPos.y, transform.position.z);
 
-        Vector3 endPos = GetClampedToScreenAreaPos(transform.position + (Vector3)(dir * kFireDist));
+        Vector3 endPos = transform.position + (Vector3)(dir * kFireDist);
+        m_FallingPlayerCam.ClampPositionToScreen(ref endPos);
 
         float ropeWorldUnitLength = 0f;
         float ropeAngle = 0f;
@@ -199,6 +194,28 @@ public class PlayerSpear : MonoBehaviour
         m_State = State.ClosedToClamp;
     }
 
+    public void TugBackClampedRope(System.Action tugDoneCallback)
+    {
+        m_TugDoneCallback = tugDoneCallback;
+        m_State = State.TuggedFromClamp;
+
+        float tweenTime = m_CurrentFireDist / (kFireUnitsPerSec * 2);
+
+        m_RopeMaskScaleTween = m_RopeShowMask.transform.DOScaleX(0f, tweenTime);
+        m_RopeMaskMoveTween = m_RopeShowMask.transform.DOLocalMove(m_CurrentStartPos, tweenTime);
+        m_SpearMoveTween = m_SpearTip.transform.DOLocalMove(m_CurrentStartPos + new Vector3(0, 0, -1f), tweenTime);
+        m_SpearMoveTween.onComplete = OnRopeTuggedFromClamp;
+    }
+
+    /// <summary>
+    /// Callback for when spear has finished being tugged back to player from a clamp position
+    /// </summary>
+    private void OnRopeTuggedFromClamp()
+    {
+        ResetToIdle();
+        m_TugDoneCallback?.Invoke();
+    }
+
     /// <summary>
     /// Callback for when spear has finished being reeled, which always follows
     /// a successful clamp to an object.
@@ -237,23 +254,6 @@ public class PlayerSpear : MonoBehaviour
         Clear();
     }
 
-    private Vector3 GetClampedToScreenAreaPos(Vector3 pos)
-    {
-        float clampedX = pos.x;
-        if (clampedX < m_ScreenMoveMin.x)
-            clampedX = m_ScreenMoveMin.x;
-        if (clampedX > m_ScreenMoveMax.x)
-            clampedX = m_ScreenMoveMax.x;
-
-        float clampedY = pos.y;
-        if (clampedY < m_ScreenMoveMin.y)
-            clampedY = m_ScreenMoveMin.y;
-        if (clampedY > m_ScreenMoveMax.y)
-            clampedY = m_ScreenMoveMax.y;
-
-        return new Vector3(clampedX, clampedY, pos.z);
-    }
-
     private void BuildRopeBetweenTwoPoints(Vector3 startPos,
                                           Vector3 endPos,
                                           out float ropeWorldUnitLength,
@@ -270,6 +270,7 @@ public class PlayerSpear : MonoBehaviour
         GameObject rope = new GameObject("rope");
         rope.transform.SetParent(m_RopeNode.transform);
         rope.transform.position = (endPos + startPos) * .5f;
+        rope.transform.localPosition = new Vector3(rope.transform.localPosition.x, rope.transform.localPosition.y, 1f);
         rope.transform.rotation = Quaternion.Euler(new Vector3(0f, 0f, angle));
         rope.transform.localScale = new Vector3(currentDist, .1f, 1f);
 

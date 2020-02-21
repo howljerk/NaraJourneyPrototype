@@ -7,6 +7,7 @@ TagManager:
   - Enemy
   - ShipHatch
   - Projectile
+  - AttackableEnemy
   layers:
   - Default
   - TransparentFX

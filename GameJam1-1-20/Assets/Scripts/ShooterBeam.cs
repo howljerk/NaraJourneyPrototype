@@ -13,6 +13,10 @@ public class ShooterBeam : MonoBehaviour
 
     private void Awake()
     {
+    }
+
+    private void Start()
+    {
         m_ScreenUnitsHeight = Camera.main.orthographicSize * 2f;
         float aspectRatio = (float)Screen.width / (float)Screen.height;
         m_ScreenUnitsWidth = m_ScreenUnitsHeight * aspectRatio;
@@ -23,7 +27,7 @@ public class ShooterBeam : MonoBehaviour
         m_ScreenBounds.center = new Vector3(0f, 0f, transform.position.z);
 
         SpriteRenderer[] sprites = GetComponentsInChildren<SpriteRenderer>(true);
-        foreach(SpriteRenderer s in sprites)
+        foreach (SpriteRenderer s in sprites)
         {
             Color color = s.color;
             s.color = new Color(color.r, color.g, color.b, 0f);

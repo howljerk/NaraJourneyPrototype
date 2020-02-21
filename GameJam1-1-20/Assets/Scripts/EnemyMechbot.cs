@@ -1,14 +1,15 @@
 ﻿using DG.Tweening;
 using UnityEngine;
 
-public class EnemyMechbot : MonoBehaviour
+public class EnemyMechbot : MonoBehaviour, IAttackableEnemy
 {
     public enum State
     {
         Idle,
         GotoAnchor,
         DestroyTarget,
-        Destroyed
+        Destroyed,
+        Damaged
     }
 
     public Enemy LinkedEnemy { get; set; }
@@ -37,7 +38,7 @@ public class EnemyMechbot : MonoBehaviour
     //Destroy target state vars
     private const float kBeamShootMinTime = 2f;
     private const float kBeamShootMaxTime = 4f;
-    private float m_TimeSinceBeamShoot;
+    private float m_TimeSinceBeamShoot = -1f;
 
     private void Awake()
     {
@@ -50,13 +51,13 @@ public class EnemyMechbot : MonoBehaviour
 
     private void Update()
     {
-        if(m_CurrentState == State.DestroyTarget)
+       if (CurrentState != State.DestroyTarget)
+            return;
+
+        if(Time.realtimeSinceStartup > m_TimeSinceBeamShoot)
         {
-            if(Time.realtimeSinceStartup > m_TimeSinceBeamShoot)
-            {
-                ShootBeamAtPlayer();
-                m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
-            }
+            ShootBeamAtPlayer();
+            m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
         }
     }
 
@@ -77,6 +78,9 @@ public class EnemyMechbot : MonoBehaviour
                 break;
             case State.Destroyed:
                 InitDestroy();
+                break;
+            case State.Damaged:
+                InitDamagedState();
                 break;
         }
     }
@@ -140,8 +144,10 @@ public class EnemyMechbot : MonoBehaviour
     private void InitDestroyTarget()
     {
         m_CurrentState = State.DestroyTarget;
-        ShootBeamAtPlayer();
-        m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
+
+        //If first time we hit this, write out beam shoot time
+        if(Mathf.Approximately(m_TimeSinceBeamShoot, -1f))
+            m_TimeSinceBeamShoot = Time.realtimeSinceStartup + Random.Range(kBeamShootMinTime, kBeamShootMaxTime);
     }
 
     private void ShootBeamAtPlayer()
@@ -170,6 +176,31 @@ public class EnemyMechbot : MonoBehaviour
     public void OnExplosionAnimFinished()
     {
         Destroy(gameObject);        
+    }
+
+    #endregion
+
+    #region Damaged state
+
+    public void OnAttacked()
+    {
+        if (CurrentState == State.GotoAnchor || CurrentState == State.Damaged)
+            return;
+
+        //TODO: Decrement hp
+        CurrentState = State.Damaged;
+    }
+
+    private void InitDamagedState()
+    {
+        m_CurrentState = State.Damaged;
+        m_AnimationState.Play("EnemyMechbot_Damaged");
+    }
+
+    public void OnDamagedAnimDone()
+    {
+        CurrentState = State.DestroyTarget;
+        m_AnimationState.Play("EnemyMechbot_Idle");
     }
 
     #endregion

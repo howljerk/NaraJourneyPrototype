@@ -1221,10 +1221,11 @@ MonoBehaviour:
   m_ScreenRoot: {fileID: 869011431}
   m_BoxCollider: {fileID: 582959650}
   m_BackgroundTap: {fileID: 1638137052}
-  m_TempDebugGetHitByProjectiles: 0
+  m_TempDebugGetHitByProjectiles: 1
   m_HijackButton: {fileID: 2028320157}
   m_PlayerSpearPrefab: {fileID: 9182669409943152891, guid: 81cdaf04dfb6a4aafa0772e1a1df7878,
     type: 3}
+  m_DebugDamagedDirArrowSprite: {fileID: 0}
 --- !u!95 &582959648
 Animator:
   serializedVersion: 3
@@ -1285,7 +1286,7 @@ BoxCollider2D:
     adaptiveTiling: 0
   m_AutoTiling: 0
   serializedVersion: 2
-  m_Size: {x: 0.1, y: 0.15}
+  m_Size: {x: 0.5, y: 0.7}
   m_EdgeRadius: 0
 --- !u!50 &582959651
 Rigidbody2D:
