@@ -88,6 +88,8 @@ public class PlayerIdleState : IPlayerState
         Vector3 pos = m_Player.transform.position;
         m_FallingCamera.ClampPositionToScreen(ref pos);
         m_Player.transform.position = pos;
+
+        m_Player.ResolveCollisions();
     }
 
     public void Exit()

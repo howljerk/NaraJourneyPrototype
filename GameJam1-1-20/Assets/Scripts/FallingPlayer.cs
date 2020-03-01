@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 
 public class FallingPlayer : MonoBehaviour
 {
@@ -11,6 +12,7 @@ public class FallingPlayer : MonoBehaviour
     [SerializeField] private PlayerAttachedToObjectState m_AttachedToObjectState = new PlayerAttachedToObjectState();
     [SerializeField] private Transform m_DisplayRoot;
     [SerializeField] private FallingPlayerCam m_FallingPlayerCam;
+    [SerializeField] private WorldChunkManager m_ChunkManager;
 
     public PlayerIdleState IdleState { get { return m_IdleState; } }
     public PlayerSpearThrowState SpearThrowState { get { return m_SpearThrowState; } }
@@ -23,6 +25,7 @@ public class FallingPlayer : MonoBehaviour
     private Vector3 m_SteerVel;
     private Vector3 m_SteerAccel;
     private bool m_PrevSteeredLeft;
+    List<WorldChunk> chunks = new List<WorldChunk>();
 
     public PlayerSpear Spear {  get { return m_PlayerSpear; } }
 
@@ -69,6 +72,40 @@ public class FallingPlayer : MonoBehaviour
         m_DisplayRoot.transform.localScale = new Vector3(-Mathf.Abs(localScale.x),
             localScale.y,
             localScale.z);
+    }
+
+    public void ResolveCollisions()
+    {
+        chunks.Clear();
+        chunks.Add(m_ChunkManager.CurrentChunk.m_Prev);
+        chunks.Add(m_ChunkManager.CurrentChunk);
+        chunks.Add(m_ChunkManager.CurrentChunk.m_Next);
+
+        Bounds playerBounds = GetComponent<Collider2D>().bounds;
+
+        foreach (WorldChunk c in chunks)
+        {
+            PushOutCollision[] collision = c.m_Collisions;
+            foreach(PushOutCollision col in collision)
+            {
+                BoxCollider2D collider = col.GetComponent<BoxCollider2D>();
+                Bounds pushOutBounds = collider.bounds;
+
+                if (!CollisionUtils.GetDoesCollide(transform.position,
+                    playerBounds,
+                    col.transform.position,
+                    pushOutBounds,
+                    out var results))
+                    continue;
+
+                Vector3 pos = transform.position;
+
+                if (results.m_PushOutAxis == RectTransform.Axis.Horizontal)
+                    transform.position = new Vector3(pos.x + results.m_PushOut, pos.y, pos.z);
+                else
+                    transform.position = new Vector3(pos.x, pos.y + results.m_PushOut, pos.z);
+            }
+        }
     }
 
     #region steer movement

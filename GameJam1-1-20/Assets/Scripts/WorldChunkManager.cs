@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class WorldChunkManager : MonoBehaviour
 {
@@ -9,12 +7,13 @@ public class WorldChunkManager : MonoBehaviour
     [SerializeField] private FallingPlayer m_Player;
 
     private WorldChunk m_CurrentChunk;
+    public WorldChunk CurrentChunk {  get { return m_CurrentChunk; } }
 
     private void Awake()
     {
-        m_CurrentChunk = CreateChunk(transform.position);
-        m_CurrentChunk.m_Prev = CreateChunk(transform.position + new Vector3(0f, 10f, 0f));
-        m_CurrentChunk.m_Next = CreateChunk(transform.position + new Vector3(0f, -10f, 0f));
+        m_CurrentChunk = CreateChunk(transform.position, "current_chunk");
+        m_CurrentChunk.m_Prev = CreateChunk(transform.position + new Vector3(0f, 10f, 0f), "prev_chunk");
+        m_CurrentChunk.m_Next = CreateChunk(transform.position + new Vector3(0f, -10f, 0f), "next_chunk");
     }
 
     private void Update()
@@ -45,9 +44,16 @@ public class WorldChunkManager : MonoBehaviour
                 playerPos.y,
                 m_CurrentChunk.transform.position.z)))
         {
+            WorldChunk oldNext = m_CurrentChunk.m_Next;
+            Destroy(oldNext.gameObject);
+
             newNextChunk = m_CurrentChunk;
+            newNextChunk.name = "next_chunk";
+
             newCurrChunk = m_CurrentChunk.m_Prev;
-            newPrevChunk = CreateChunk(newCurrChunk.transform.position + new Vector3(0f, 10f, 0f));
+            newCurrChunk.name = "current_chunk";
+
+            newPrevChunk = CreateChunk(newCurrChunk.transform.position + new Vector3(0f, 10f, 0f), "prev_chunk");
 
             m_CurrentChunk = newCurrChunk;
             m_CurrentChunk.m_Prev = newPrevChunk;
@@ -56,19 +62,29 @@ public class WorldChunkManager : MonoBehaviour
             return;
         }
 
+        WorldChunk oldPrev = m_CurrentChunk.m_Prev;
+        Destroy(oldPrev.gameObject);
+
         newPrevChunk = m_CurrentChunk;
+        newPrevChunk.name = "prev_chunk";
+
         newCurrChunk = m_CurrentChunk.m_Next;
-        newNextChunk = CreateChunk(newCurrChunk.transform.position + new Vector3(0f, -10f, 0f));
+        newCurrChunk.name = "current_chunk";
+
+        newNextChunk = CreateChunk(newCurrChunk.transform.position + new Vector3(0f, -10f, 0f), "next_chunk");
 
         m_CurrentChunk = newCurrChunk;
         m_CurrentChunk.m_Prev = newPrevChunk;
         m_CurrentChunk.m_Next = newNextChunk;
     }
 
-    private WorldChunk CreateChunk(Vector3 chunkPos)
+    private WorldChunk CreateChunk(Vector3 chunkPos, string name)
     {
         GameObject chunkObj = Instantiate(m_WorldChunkPrefab, transform);
         chunkObj.transform.position = chunkPos;
-        return chunkObj.GetComponent<WorldChunk>();
+        chunkObj.name = name;
+        WorldChunk chunk = chunkObj.GetComponent<WorldChunk>();
+        chunk.m_Collisions = chunk.GetComponentsInChildren<PushOutCollision>();
+        return chunk;
     }
 }

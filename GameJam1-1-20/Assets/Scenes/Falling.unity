@@ -1509,6 +1509,7 @@ MonoBehaviour:
     m_Animations: {fileID: 1229214989}
   m_DisplayRoot: {fileID: 1457473671}
   m_FallingPlayerCam: {fileID: 768682402}
+  m_ChunkManager: {fileID: 899719608}
 --- !u!1 &1322092425
 GameObject:
   m_ObjectHideFlags: 0

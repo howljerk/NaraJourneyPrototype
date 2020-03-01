@@ -1,13 +1,5 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PushOutCollision : MonoBehaviour
 {
-    private void OnTriggerEnter2D(Collider2D otherCollider)
-    {
-        if(otherCollider.tag == "Player")
-        {
-        }
-    }
 }

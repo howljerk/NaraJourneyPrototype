@@ -67,6 +67,7 @@
     <Compile Include="Assets\Scripts\Background\HorizontalScroller.cs" />
     <Compile Include="Assets\Scripts\Background\VerticalScroller.cs" />
     <Compile Include="Assets\Scripts\BackgroundTap.cs" />
+    <Compile Include="Assets\Scripts\CollisionUtils.cs" />
     <Compile Include="Assets\Scripts\DistanceIntervalEnemySpawner.cs" />
     <Compile Include="Assets\Scripts\Enemy.cs" />
     <Compile Include="Assets\Scripts\EnemyMechbot.cs" />
